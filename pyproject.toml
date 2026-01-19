@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "eml-analyzer"
+version = "0.1.0"
+description = "Class-based EML analyzer with recursive parsing and VirusTotal lookup"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.31.0"]
+
+[project.scripts]
+eml-analyzer = "eml_analyzer.cli:main"
