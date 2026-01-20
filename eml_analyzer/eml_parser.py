@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import email
 import os
+import re
 from email import policy
 from email.message import Message
-from email.utils import getaddresses, parseaddr
+from email.utils import getaddresses, parseaddr, parsedate_to_datetime
+from datetime import timezone
 from typing import Any
 
 from .hashing import hash_bytes
@@ -52,6 +54,7 @@ class EmlParser:
             headers=headers,
             raw_headers=raw_headers,
         )
+        analysis.mime_tree = _build_mime_tree(msg)
         self._extract_sender_domain(analysis)
         self._extract_ips_from_headers(headers, analysis)
 
@@ -173,6 +176,10 @@ class EmlParser:
     def _analyze_headers(self, msg: Message) -> HeaderAnalysis:
         received_chain = msg.get_all("Received", [])
         auth_results = self._parse_auth_results(msg.get_all("Authentication-Results", []))
+        arc_chain = self._analyze_arc_chain(msg)
+        timing, mta_anomalies, mta_anomaly_details = self._analyze_timing(
+            received_chain, msg.get("Date")
+        )
         summary = {
             "message_id": msg.get("Message-Id"),
             "in_reply_to": msg.get("In-Reply-To"),
@@ -185,6 +192,10 @@ class EmlParser:
             summary=summary,
             received_chain=received_chain,
             auth_results=auth_results,
+            arc_chain=arc_chain,
+            timing=timing,
+            mta_anomalies=mta_anomalies,
+            mta_anomaly_details=mta_anomaly_details,
         )
 
     def _extract_ips_from_headers(
@@ -271,6 +282,199 @@ class EmlParser:
                 return candidate
             counter += 1
 
+    @staticmethod
+    def _analyze_arc_chain(msg: Message) -> dict[str, Any]:
+        arc_seals = msg.get_all("ARC-Seal", [])
+        arc_msigs = msg.get_all("ARC-Message-Signature", [])
+        arc_auths = msg.get_all("ARC-Authentication-Results", [])
+        instances = _arc_instances(arc_seals)
+        details: list[dict[str, Any]] = []
+        cv_pass = 0
+        cv_fail = 0
+        for seal in arc_seals:
+            fields = _arc_fields(seal, ("i", "cv", "d", "s"))
+            cv = fields.get("cv", "").lower()
+            if cv == "pass":
+                cv_pass += 1
+            elif cv:
+                cv_fail += 1
+            details.append({"type": "ARC-Seal", "raw": seal, **fields})
+        for sig in arc_msigs:
+            fields = _arc_fields(sig, ("i", "d", "s"))
+            details.append({"type": "ARC-Message-Signature", "raw": sig, **fields})
+        for auth in arc_auths:
+            details.append({"type": "ARC-Authentication-Results", "raw": auth})
+        status = "ok"
+        if not arc_seals and (arc_msigs or arc_auths):
+            status = "mismatch"
+        if arc_seals:
+            expected = list(range(1, len(arc_seals) + 1))
+            if instances and instances != expected:
+                status = "mismatch"
+            if len(arc_msigs) != len(arc_seals) or len(arc_auths) != len(arc_seals):
+                status = "mismatch"
+        return {
+            "seals": len(arc_seals),
+            "message_signatures": len(arc_msigs),
+            "auth_results": len(arc_auths),
+            "instances": instances,
+            "status": status,
+            "signature_results": {"cv_pass": cv_pass, "cv_fail": cv_fail},
+            "details": details,
+        }
+
+    @staticmethod
+    def _analyze_timing(
+        received_chain: list[str], date_header: str | None
+    ) -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
+        anomalies: list[str] = []
+        details: list[dict[str, Any]] = []
+        received_dates = _parse_received_dates(received_chain)
+        date_dt = _parse_date(date_header)
+        timing: dict[str, Any] = {}
+
+        if not received_chain:
+            anomalies.append("no_received_headers")
+            details.append(
+                {
+                    "code": "no_received_headers",
+                    "severity": "medium",
+                    "description": "No Received headers found; delivery path cannot be verified.",
+                }
+            )
+        if received_chain and not received_dates:
+            anomalies.append("received_dates_unparsable")
+            details.append(
+                {
+                    "code": "received_dates_unparsable",
+                    "severity": "low",
+                    "description": "Received headers present but dates could not be parsed.",
+                }
+            )
+
+        if date_dt:
+            timing["date_utc"] = date_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+        if received_dates:
+            first_received = min(received_dates)
+            timing["first_received_utc"] = first_received.strftime("%Y-%m-%d %H:%M:%S UTC")
+            if date_dt:
+                drift_minutes = int((date_dt - first_received).total_seconds() / 60)
+                timing["timezone_drift_minutes"] = drift_minutes
+                if drift_minutes > 60:
+                    anomalies.append("date_after_first_received_over_60m")
+                    details.append(
+                        {
+                            "code": "date_after_first_received_over_60m",
+                            "severity": "medium",
+                            "description": "Date header is more than 60 minutes after first Received timestamp.",
+                            "value": drift_minutes,
+                        }
+                    )
+                if drift_minutes < -1440:
+                    anomalies.append("date_before_first_received_over_24h")
+                    details.append(
+                        {
+                            "code": "date_before_first_received_over_24h",
+                            "severity": "high",
+                            "description": "Date header is more than 24 hours before first Received timestamp.",
+                            "value": drift_minutes,
+                        }
+                    )
+
+            if _has_received_time_inversion(received_dates):
+                anomalies.append("received_time_inversion")
+                details.append(
+                    {
+                        "code": "received_time_inversion",
+                        "severity": "high",
+                        "description": "Received timestamps appear out of order (possible header manipulation).",
+                    }
+                )
+
+        return timing, anomalies, details
+
+
+
+def _parse_date(value: str | None) -> Any | None:
+    if not value:
+        return None
+    try:
+        date_dt = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if not date_dt:
+        return None
+    if date_dt.tzinfo is None:
+        date_dt = date_dt.replace(tzinfo=timezone.utc)
+    return date_dt.astimezone(timezone.utc)
+
+
+def _parse_received_dates(received_chain: list[str]) -> list[Any]:
+    dates = []
+    for item in received_chain:
+        if ";" not in item:
+            continue
+        date_part = item.split(";")[-1].strip()
+        parsed = _parse_date(date_part)
+        if parsed:
+            dates.append(parsed)
+    return dates
+
+
+def _has_received_time_inversion(dates: list[Any]) -> bool:
+    if len(dates) < 2:
+        return False
+    for prev, current in zip(dates, dates[1:]):
+        if current > prev:
+            return True
+    return False
+
+
+def _arc_instances(arc_seals: list[str]) -> list[int]:
+    instances = []
+    for seal in arc_seals:
+        match = re.search(r"\bi=(\d+)", seal)
+        if match:
+            try:
+                instances.append(int(match.group(1)))
+            except ValueError:
+                continue
+    return sorted(instances)
+
+
+def _arc_fields(value: str, keys: tuple[str, ...]) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for key in keys:
+        match = re.search(rf"\b{key}=([^;\\s]+)", value)
+        if match:
+            fields[key] = match.group(1)
+    return fields
+
+
+def _build_mime_tree(msg: Message) -> dict[str, Any]:
+    node: dict[str, Any] = {
+        "content_type": msg.get_content_type(),
+        "content_disposition": msg.get_content_disposition(),
+        "filename": msg.get_filename(),
+        "size": _part_size(msg),
+        "children": [],
+    }
+    if msg.is_multipart():
+        for child in msg.iter_parts():
+            node["children"].append(_build_mime_tree(child))
+    return node
+
+
+def _part_size(part: Message) -> int:
+    if part.is_multipart():
+        return 0
+    payload = part.get_payload(decode=True)
+    if payload is None:
+        return 0
+    return len(payload)
+
+
+
 
 def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
     return {
@@ -283,7 +487,12 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
             "summary": analysis.headers.summary,
             "received_chain": analysis.headers.received_chain,
             "auth_results": analysis.headers.auth_results,
+            "arc_chain": analysis.headers.arc_chain,
+            "timing": analysis.headers.timing,
+            "mta_anomalies": analysis.headers.mta_anomalies,
+            "mta_anomaly_details": analysis.headers.mta_anomaly_details,
         },
+        "mime_tree": analysis.mime_tree,
         "urls": [
             {
                 "url": item.url,

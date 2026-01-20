@@ -23,6 +23,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Analyze all .eml files in a directory.",
     )
     parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Recursively scan directories when using -d.",
+    )
+    parser.add_argument(
+        "--include",
+        action="append",
+        default=[],
+        help="Include glob pattern(s) for directory scans (default: *.eml).",
+    )
+    parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Exclude glob pattern(s) for directory scans.",
+    )
+    parser.add_argument(
         "--json",
         nargs="?",
         const=True,
@@ -72,7 +89,13 @@ def main(argv: list[str] | None = None) -> int:
 
     config = AnalyzerConfig.from_env()
     analyzer = EmlAnalyzer(config, verbose=args.verbose)
-    eml_paths = _collect_eml_paths(args.eml, args.dir)
+    eml_paths = _collect_eml_paths(
+        args.eml,
+        args.dir,
+        recursive=args.recursive,
+        includes=args.include,
+        excludes=args.exclude,
+    )
     if not eml_paths:
         return 0
 
@@ -142,8 +165,15 @@ def _split_eml_path(eml_path: str) -> tuple[str, str]:
     return os.path.join(directory, stem), directory
 
 
-def _collect_eml_paths(eml_path: str | None, directory: str | None) -> list[str]:
+def _collect_eml_paths(
+    eml_path: str | None,
+    directory: str | None,
+    recursive: bool = False,
+    includes: list[str] | None = None,
+    excludes: list[str] | None = None,
+) -> list[str]:
     import os
+    import fnmatch
 
     if eml_path:
         return [eml_path]
@@ -151,11 +181,32 @@ def _collect_eml_paths(eml_path: str | None, directory: str | None) -> list[str]
         return []
     if not os.path.isdir(directory):
         return []
-    entries = []
-    for name in os.listdir(directory):
-        if name.lower().endswith(".eml"):
-            entries.append(os.path.join(directory, name))
+    include_patterns = includes or []
+    exclude_patterns = excludes or []
+    if not include_patterns:
+        include_patterns = ["*.eml"]
+
+    entries: list[str] = []
+    if recursive:
+        for root, _, files in os.walk(directory):
+            for name in files:
+                if _match_patterns(name, include_patterns, exclude_patterns):
+                    entries.append(os.path.join(root, name))
+    else:
+        for name in os.listdir(directory):
+            if _match_patterns(name, include_patterns, exclude_patterns):
+                entries.append(os.path.join(directory, name))
     return sorted(entries)
+
+
+def _match_patterns(name: str, includes: list[str], excludes: list[str]) -> bool:
+    import fnmatch
+
+    if not any(fnmatch.fnmatch(name, pattern) for pattern in includes):
+        return False
+    if any(fnmatch.fnmatch(name, pattern) for pattern in excludes):
+        return False
+    return True
 
 
 def _resolve_output_dir(dir_value: str | None, json_value: object, html_value: object) -> str | None:

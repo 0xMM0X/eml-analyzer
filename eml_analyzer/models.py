@@ -46,6 +46,10 @@ class HeaderAnalysis:
     summary: dict[str, Any] = field(default_factory=dict)
     received_chain: list[str] = field(default_factory=list)
     auth_results: dict[str, str] = field(default_factory=dict)
+    arc_chain: dict[str, Any] = field(default_factory=dict)
+    timing: dict[str, Any] = field(default_factory=dict)
+    mta_anomalies: list[str] = field(default_factory=list)
+    mta_anomaly_details: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -59,6 +63,7 @@ class MessageAnalysis:
     urls: list[UrlInfo] = field(default_factory=list)
     ips: list[IpInfo] = field(default_factory=list)
     domains: list[DomainInfo] = field(default_factory=list)
+    mime_tree: dict[str, Any] | None = None
     attachments: list[AttachmentInfo] = field(default_factory=list)
     raw_headers: dict[str, str] = field(default_factory=dict)
 

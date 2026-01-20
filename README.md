@@ -16,6 +16,8 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - JSON and HTML reporting output
 - Sender domain MX checks via MxToolbox (optional)
 - Office macro extraction with oletools/olefile support
+- MIME structure visualization in the HTML report
+- Directory scans with include/exclude patterns
 
 ## Setup
 
@@ -53,6 +55,11 @@ Analyze a directory of EML files (writes to `output/` under the directory):
 
 ```bash
 python -m eml_analyzer.cli -d path\to\emls --json --html
+```
+Recursive directory scan with filters:
+
+```bash
+python -m eml_analyzer.cli -d path\to\emls --recursive --include "*.eml" --exclude "*newsletter*"
 ```
 Dark mode HTML:
 
@@ -121,4 +128,5 @@ Risk level mapping:
 - High: score > 5
 
 ## Planned Features
-- More header forensics (ARC chain, timezone drift, MTA anomalies)
+- URL/attachment sandboxing integrations (open-source detonation feeds)
+

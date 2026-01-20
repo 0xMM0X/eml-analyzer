@@ -101,6 +101,13 @@ def build_html_report(
     parts.append(".status-malicious{color:#b02a2a;font-weight:bold;}")
     parts.append(".status-suspicious{color:#cc7a00;font-weight:bold;}")
     parts.append(".status-neutral{color:#6b5b4a;font-weight:bold;}")
+    parts.append(".badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:0.8rem;font-weight:bold;}")
+    if theme == "dark":
+        parts.append(".badge-ok{background:#1f3a2f;color:#bde7cf;}")
+        parts.append(".badge-warn{background:#3a2c16;color:#f7d29c;}")
+    else:
+        parts.append(".badge-ok{background:#e4f2ea;color:#1b5e3c;}")
+        parts.append(".badge-warn{background:#fff1d6;color:#8a5a1f;}")
     parts.append(".pill-group{display:inline-flex;flex-wrap:wrap;gap:6px;}")
     parts.append(".mini-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.06);}")
     if theme == "dark":
@@ -112,6 +119,20 @@ def build_html_report(
     parts.append(
         ".received-table td{font-size:0.9rem;line-height:1.4;}"
     )
+    parts.append(".mime-tree{list-style:none;margin:0;padding-left:14px;border-left:2px solid rgba(0,0,0,0.08);}")
+    if theme == "dark":
+        parts.append(".mime-tree{border-left:2px solid rgba(255,255,255,0.08);}")
+    parts.append(".mime-node{margin:6px 0;padding-left:10px;position:relative;}")
+    parts.append(".mime-node:before{content:'';position:absolute;left:-12px;top:10px;width:10px;height:1px;background:rgba(0,0,0,0.2);}")
+    if theme == "dark":
+        parts.append(".mime-node:before{background:rgba(255,255,255,0.2);}")
+    parts.append(".mime-label{font-weight:bold;}")
+    parts.append(".mime-meta{display:inline-flex;gap:6px;flex-wrap:wrap;font-size:0.85rem;color:#6b5b4a;}")
+    if theme == "dark":
+        parts.append(".mime-meta{color:#a7b7cd;}")
+    parts.append(".mime-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.06);}")
+    if theme == "dark":
+        parts.append(".mime-pill{background:rgba(255,255,255,0.1);}")
     parts.append(".cell{display:flex;align-items:center;gap:8px;}")
     parts.append(".cell-value{flex:1;min-width:0;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;word-break:break-word;}")
     parts.append(".cell .copy-btn{margin-left:auto;}")
@@ -179,6 +200,29 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
     if auth:
         parts.append("<div class=\"section\"><h3>Authentication Results</h3>")
         parts.append(_auth_table(auth))
+        parts.append("</div>")
+
+    mime_tree = message.get("mime_tree")
+    if mime_tree:
+        parts.append("<div class=\"section\"><h3>MIME Structure</h3>")
+        parts.append(_render_mime_tree(mime_tree))
+        parts.append("</div>")
+
+    arc_chain = headers.get("arc_chain", {})
+    if arc_chain and (arc_chain.get("details") or arc_chain.get("seals")):
+        parts.append("<div class=\"section\"><h3>ARC Chain</h3>")
+        parts.append(_arc_chain_table(arc_chain))
+        parts.append("</div>")
+
+    timing = headers.get("timing", {})
+    anomalies = headers.get("mta_anomalies", [])
+    anomaly_details = headers.get("mta_anomaly_details", [])
+    if timing or anomalies:
+        parts.append("<div class=\"section\"><h3>Timing & MTA</h3>")
+        if timing:
+            parts.append(_timing_table(timing))
+        if anomalies or anomaly_details:
+            parts.append(_anomalies_list(anomalies, anomaly_details))
         parts.append("</div>")
 
     if received:
@@ -414,6 +458,109 @@ def _parse_received(value: str) -> dict[str, Any]:
             result["date"] = date_part
     result["date_sort"] = date_value
     return result
+
+
+def _render_mime_tree(node: dict[str, Any]) -> str:
+    def render_node(item: dict[str, Any]) -> str:
+        content_type = html.escape(str(item.get("content_type") or ""))
+        disposition = html.escape(str(item.get("content_disposition") or ""))
+        filename = html.escape(str(item.get("filename") or ""))
+        size = item.get("size")
+        meta_parts = []
+        if disposition:
+            meta_parts.append(f"<span class=\"mime-pill\">{disposition}</span>")
+        if filename:
+            meta_parts.append(f"<span class=\"mime-pill\">file={filename}</span>")
+        if isinstance(size, int) and size:
+            meta_parts.append(f"<span class=\"mime-pill\">size={size}b</span>")
+        meta_html = f"<span class=\"mime-meta\">{''.join(meta_parts)}</span>" if meta_parts else ""
+        children = item.get("children") or []
+        html_parts = [
+            f"<li class=\"mime-node\"><span class=\"mime-label\">{content_type}</span>{meta_html}"
+        ]
+        if children:
+            html_parts.append("<ul class=\"mime-tree\">")
+            for child in children:
+                html_parts.append(render_node(child))
+            html_parts.append("</ul>")
+        html_parts.append("</li>")
+        return "".join(html_parts)
+
+    return f"<ul class=\"mime-tree\">{render_node(node)}</ul>"
+
+
+def _arc_chain_table(arc_chain: dict[str, Any]) -> str:
+    rows = []
+    rows.append("<table>")
+    rows.append("<tr><th>Seals</th><th>Message Signatures</th><th>Auth Results</th><th>Instances</th><th>Status</th><th>Signature Results</th></tr>")
+    status = arc_chain.get("status", "unknown")
+    badge_class = "badge-ok" if status == "ok" else "badge-warn"
+    sig_results = arc_chain.get("signature_results") or {}
+    sig_text = f"cv_pass={sig_results.get('cv_pass', 0)}, cv_fail={sig_results.get('cv_fail', 0)}"
+    rows.append(
+        "<tr>"
+        f"<td>{arc_chain.get('seals', 0)}</td>"
+        f"<td>{arc_chain.get('message_signatures', 0)}</td>"
+        f"<td>{arc_chain.get('auth_results', 0)}</td>"
+        f"<td>{html.escape(str(arc_chain.get('instances', [])))}</td>"
+        f"<td><span class=\"badge {badge_class}\">{html.escape(status)}</span></td>"
+        f"<td>{html.escape(sig_text)}</td>"
+        "</tr>"
+    )
+    rows.append("</table>")
+    details = arc_chain.get("details") or []
+    if details:
+        rows.append("<div class=\"section\"><h4>ARC Details</h4>")
+        rows.append("<table>")
+        rows.append("<tr><th>Type</th><th>i</th><th>d</th><th>s</th><th>cv</th><th>Raw</th></tr>")
+        for item in details:
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(item.get('type', '')))}</td>"
+                f"<td>{html.escape(str(item.get('i', '')))}</td>"
+                f"<td>{html.escape(str(item.get('d', '')))}</td>"
+                f"<td>{html.escape(str(item.get('s', '')))}</td>"
+                f"<td>{html.escape(str(item.get('cv', '')))}</td>"
+                f"<td>{html.escape(str(item.get('raw', '')))}</td>"
+                "</tr>"
+            )
+        rows.append("</table>")
+        rows.append("</div>")
+    return "\n".join(rows)
+
+
+def _timing_table(timing: dict[str, Any]) -> str:
+    rows = []
+    rows.append("<table>")
+    for key in ("date_utc", "first_received_utc", "timezone_drift_minutes"):
+        if key in timing:
+            rows.append(f"<tr><th>{html.escape(key)}</th><td>{html.escape(str(timing.get(key)))}</td></tr>")
+    rows.append("</table>")
+    return "\n".join(rows)
+
+
+def _anomalies_list(anomalies: list[str], details: list[dict[str, Any]]) -> str:
+    items = []
+    items.append("<div class=\"small\">Anomalies</div>")
+    items.append("<ul>")
+    if details:
+        for item in details:
+            code = html.escape(str(item.get("code", "")))
+            severity = html.escape(str(item.get("severity", "")))
+            description = html.escape(str(item.get("description", "")))
+            value = item.get("value")
+            value_text = f" (value={value})" if value is not None else ""
+            badge_class = "badge-warn" if severity in {"medium", "high"} else "badge-ok"
+            items.append(
+                f"<li><span class=\"badge {badge_class}\">{severity}</span> {code}: {description}{html.escape(value_text)}</li>"
+            )
+    else:
+        for item in anomalies:
+            items.append(f"<li>{html.escape(item)}</li>")
+    items.append("</ul>")
+    return "\n".join(items)
+
+
 
 
 def _summary_tile(label: str, value: Any, highlight: bool = False) -> str:
