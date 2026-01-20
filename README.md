@@ -18,6 +18,8 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - Office macro extraction with oletools/olefile support
 - MIME structure visualization in the HTML report
 - Directory scans with include/exclude patterns
+- Timing drift and MTA anomaly detection
+- Attachment magic-byte header verification
 
 ## Setup
 
