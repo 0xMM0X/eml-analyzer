@@ -1,6 +1,6 @@
 # EML Analyzer
 
-EML analysis tool that parses messages, extracts headers, URLs, and attachments, and recursively analyzes nested EML attachments. Optional VirusTotal lookups are supported for attachment hashes and URLs.
+Full EML triage toolkit built for investigative workflows. It parses message headers and bodies, walks nested EML attachments recursively, extracts URLs, IPs, and attachments, calculates hashes, and enriches findings with threat‑intel lookups. Outputs are available as JSON for deep investigation and as a styled HTML report for quick review.
 
 ## Features
 - Parses headers and Received chains
@@ -14,6 +14,8 @@ EML analysis tool that parses messages, extracts headers, URLs, and attachments,
 - Risk scoring (0-10) with clear (<5), medium (=5), and high (>5) levels
 - Optional attachment extraction to disk
 - JSON and HTML reporting output
+- Sender domain MX checks via MxToolbox (optional)
+- Office macro extraction with oletools/olefile support
 
 ## Setup
 
@@ -117,3 +119,6 @@ Risk level mapping:
 - Clear: score < 5
 - Medium: score = 5
 - High: score > 5
+
+## Planned Features
+- More header forensics (ARC chain, timezone drift, MTA anomalies)
