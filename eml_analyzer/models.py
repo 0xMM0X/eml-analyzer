@@ -29,6 +29,12 @@ class UrlInfo:
 
 
 @dataclass
+class DomainInfo:
+    domain: str
+    mxtoolbox: dict[str, Any] | None = None
+
+
+@dataclass
 class IpInfo:
     ip: str
     source: str
@@ -52,6 +58,7 @@ class MessageAnalysis:
     headers: HeaderAnalysis
     urls: list[UrlInfo] = field(default_factory=list)
     ips: list[IpInfo] = field(default_factory=list)
+    domains: list[DomainInfo] = field(default_factory=list)
     attachments: list[AttachmentInfo] = field(default_factory=list)
     raw_headers: dict[str, str] = field(default_factory=dict)
 

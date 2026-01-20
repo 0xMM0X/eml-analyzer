@@ -113,7 +113,7 @@ def build_html_report(
         ".received-table td{font-size:0.9rem;line-height:1.4;}"
     )
     parts.append(".cell{display:flex;align-items:center;gap:8px;}")
-    parts.append(".cell-value{flex:1;min-width:0;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;}")
+    parts.append(".cell-value{flex:1;min-width:0;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;word-break:break-word;}")
     parts.append(".cell .copy-btn{margin-left:auto;}")
     if theme == "dark":
         parts.append(".code-block{background:#0f1622;color:#e5eef9;border:1px solid #2f3d52;border-radius:10px;padding:10px;overflow:auto;white-space:pre-wrap;}")
@@ -190,11 +190,10 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
     if urls:
         parts.append("<div class=\"section\"><h3>URLs</h3>")
         parts.append(
-            "<table><tr><th>URL</th><th>Source</th><th>VT</th><th>URLScan</th></tr>"
+            "<table><tr><th>URL</th><th>VT</th><th>URLScan</th></tr>"
         )
         for item in urls:
             url_value = str(item.get("url"))
-            source_value = str(item.get("source"))
             vt_summary = _format_vt_summary(item.get("vt"))
             vt_summary = _with_icon_link(vt_summary, _vt_url_link(item.get("url")))
             urlscan_summary = _format_urlscan_summary(item.get("urlscan"))
@@ -205,7 +204,6 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
             parts.append(
                 "<tr>"
                 f"<td>{_cell_value(html.escape(url_value), url_value)}</td>"
-                f"<td>{_cell_value(html.escape(source_value), source_value)}</td>"
                 f"<td>{_cell_value(_format_table_value(vt_summary), vt_summary)}</td>"
                 f"<td>{_cell_value(_format_table_value(urlscan_summary), urlscan_summary)}</td>"
                 "</tr>"
@@ -215,16 +213,39 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
     ips = message.get("ips", [])
     if ips:
         parts.append("<div class=\"section\"><h3>IPs</h3>")
-        parts.append("<table><tr><th>IP</th><th>Source</th><th>AbuseIPDB</th></tr>")
+        parts.append("<table><tr><th>IP</th><th>AbuseIPDB</th></tr>")
         for item in ips:
             ip_value = str(item.get("ip"))
-            source_value = str(item.get("source"))
             abuse_summary = _format_abuse_summary(item.get("abuseipdb"))
             parts.append(
                 "<tr>"
                 f"<td>{_cell_value(html.escape(ip_value), ip_value)}</td>"
-                f"<td>{_cell_value(html.escape(source_value), source_value)}</td>"
                 f"<td>{_cell_value(_format_table_value(abuse_summary), abuse_summary)}</td>"
+                "</tr>"
+            )
+        parts.append("</table></div>")
+
+    domains = message.get("domains", [])
+    if domains:
+        parts.append("<div class=\"section\"><h3>Sender Domain</h3>")
+        parts.append(
+            "<table><tr><th>Domain</th><th>MxToolbox</th><th>Passed</th><th>Warnings</th><th>Failed</th><th>MX Rep</th><th>DNS Server</th><th>Time (ms)</th></tr>"
+        )
+        for item in domains:
+            domain_value = str(item.get("domain"))
+            mx_summary = _format_mxtoolbox_summary(item.get("mxtoolbox"))
+            mx_passed, mx_warnings, mx_failed = _format_mxtoolbox_sets(item.get("mxtoolbox"))
+            mx_rep, mx_dns, mx_time = _format_mxtoolbox_meta(item.get("mxtoolbox"))
+            parts.append(
+                "<tr>"
+                f"<td>{_cell_value(html.escape(domain_value), domain_value)}</td>"
+                f"<td>{_cell_value(_format_table_value(mx_summary), mx_summary)}</td>"
+                f"<td>{_cell_value(_format_table_value(mx_passed), mx_passed)}</td>"
+                f"<td>{_cell_value(_format_table_value(mx_warnings), mx_warnings)}</td>"
+                f"<td>{_cell_value(_format_table_value(mx_failed), mx_failed)}</td>"
+                f"<td>{_cell_value(html.escape(mx_rep), mx_rep)}</td>"
+                f"<td>{_cell_value(html.escape(mx_dns), mx_dns)}</td>"
+                f"<td>{_cell_value(html.escape(mx_time), mx_time)}</td>"
                 "</tr>"
             )
         parts.append("</table></div>")
@@ -644,6 +665,83 @@ def _format_hybrid_summary(hybrid: dict[str, Any] | None) -> str:
             return _pill_group(_colorize_verdicts(sorted(set(verdicts))))
         return f"matches={len(data)}"
     return "ok"
+
+
+def _format_mxtoolbox_summary(mx: dict[str, Any] | None) -> str:
+    if not mx:
+        return "none"
+    status = mx.get("status")
+    if status != "ok":
+        return _format_error(mx)
+    data = _mxtoolbox_data(mx)
+    warnings = data.get("Warnings") or data.get("warnings") or []
+    failed = data.get("Failed") or data.get("failed") or []
+    passed = data.get("Passed") or data.get("passed") or []
+    return f"failed={len(failed)}, warnings={len(warnings)}, passed={len(passed)}"
+
+
+def _format_mxtoolbox_sets(mx: dict[str, Any] | None) -> tuple[str, str, str]:
+    if not mx or mx.get("status") != "ok":
+        return ("", "", "")
+    data = _mxtoolbox_data(mx)
+    passed = data.get("Passed") or data.get("passed") or []
+    warnings = data.get("Warnings") or data.get("warnings") or []
+    failed = data.get("Failed") or data.get("failed") or []
+    return (
+        _format_mx_list(passed, "passed"),
+        _format_mx_list(warnings, "warnings"),
+        _format_mx_list(failed, "failed"),
+    )
+
+
+def _format_mx_list(items: Any, label: str) -> str:
+    if not isinstance(items, list) or not items:
+        return f"{label}=0"
+    names = []
+    for item in items[:3]:
+        if isinstance(item, dict):
+            name = item.get("Name") or item.get("name")
+            info = item.get("Info") or item.get("info")
+            url = item.get("Url") or item.get("url")
+            if name and info:
+                names.append(_format_mx_item(f"{name}: {info}", url))
+            elif name:
+                names.append(_format_mx_item(name, url))
+            elif info:
+                names.append(_format_mx_item(info, url))
+        else:
+            names.append(str(item))
+    tail = f"{label}={len(items)}"
+    if names:
+        tail = f"{tail}; " + "; ".join(names)
+    return tail
+
+
+def _format_mx_item(text: str, url: str | None) -> str:
+    safe_text = html.escape(text)
+    if not url:
+        return safe_text
+    href = html.escape(str(url))
+    return f"{safe_text} <a href=\"{href}\" target=\"_blank\" class=\"icon-link\">&#128279;</a>"
+
+
+def _mxtoolbox_data(mx: dict[str, Any]) -> dict[str, Any]:
+    data = mx.get("data")
+    if isinstance(data, list) and data:
+        data = data[0]
+    if isinstance(data, dict):
+        return data
+    return mx if isinstance(mx, dict) else {}
+
+
+def _format_mxtoolbox_meta(mx: dict[str, Any] | None) -> tuple[str, str, str]:
+    if not mx or mx.get("status") != "ok":
+        return ("", "", "")
+    data = _mxtoolbox_data(mx)
+    mx_rep = str(data.get("MxRep") or data.get("mxRep") or "")
+    dns = str(data.get("ReportingNameServer") or data.get("reportingNameServer") or "")
+    time_ms = str(data.get("TimeToComplete") or data.get("timeToComplete") or "")
+    return (mx_rep, dns, time_ms)
 
 
 def _colorize_count(

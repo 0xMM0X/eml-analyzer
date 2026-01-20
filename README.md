@@ -38,36 +38,41 @@ pip install oletools
 ## Usage
 
 ```bash
-python -m eml_analyzer.cli --eml path\to\message.eml --json
+python -m eml_analyzer.cli -f path\to\message.eml --json
 ```
 Defaults to `path\to\message-report.json`. Use `--json custom.json` to override.
 
 Write both JSON and HTML reports:
 
 ```bash
-python -m eml_analyzer.cli --eml message.eml --json --html
+python -m eml_analyzer.cli -f message.eml --json --html
+```
+Analyze a directory of EML files (writes to `output/` under the directory):
+
+```bash
+python -m eml_analyzer.cli -d path\to\emls --json --html
 ```
 Dark mode HTML:
 
 ```bash
-python -m eml_analyzer.cli --eml message.eml --html --dark
+python -m eml_analyzer.cli -f message.eml --html --dark
 ```
 Add verbose debugging:
 
 ```bash
-python -m eml_analyzer.cli --eml message.eml --json --html -v
+python -m eml_analyzer.cli -f message.eml --json --html -v
 ```
 Include score calculation details:
 
 ```bash
-python -m eml_analyzer.cli --eml message.eml --json --html --score-details
+python -m eml_analyzer.cli -f message.eml --json --html --score-details
 ```
 Defaults to `message-report.json` and `message-report.html`.
 
 Extract attachments:
 
 ```bash
-python -m eml_analyzer.cli --eml message.eml -e --extract-dir extracted_files
+python -m eml_analyzer.cli -f message.eml -e --extract-dir extracted_files
 ```
 If `--extract-dir` is omitted, attachments are saved alongside the input EML.
 
@@ -75,13 +80,13 @@ Optional VirusTotal API key:
 
 ```bash
 set VT_API_KEY=your_key_here
-python -m eml_analyzer.cli --eml message.eml --output report.json
+python -m eml_analyzer.cli -f message.eml --output report.json
 ```
 
 Submit URLs to VirusTotal if no report exists:
 
 ```bash
-python -m eml_analyzer.cli --eml message.eml --allow-url-submission
+python -m eml_analyzer.cli -f message.eml --allow-url-submission
 ```
 
 ## Configuration (Environment Variables)
@@ -93,6 +98,9 @@ python -m eml_analyzer.cli --eml message.eml --allow-url-submission
 - `URLSCAN_API_KEY`: urlscan.io API key
 
 You can set these once in `.env` (see `.env.example`).
+Report defaults:
+- `REPORT_DARK`: Use dark mode HTML by default (true/false)
+- `REPORT_SCORE_DETAILS`: Include score breakdown by default (true/false)
 
 ## Output
 The report is JSON containing root message analysis, nested EML details, URL findings, attachment hashes, optional VirusTotal results, and `risk_score`/`risk_level` fields in `statistics`.

@@ -14,6 +14,9 @@ class AnalyzerConfig:
     abuseipdb_api_key: str | None = None
     urlscan_api_key: str | None = None
     hybrid_api_key: str | None = None
+    mxtoolbox_api_key: str | None = None
+    report_dark: bool = False
+    report_score_details: bool = False
 
     @staticmethod
     def from_env() -> "AnalyzerConfig":
@@ -27,6 +30,10 @@ class AnalyzerConfig:
             abuseipdb_api_key=os.getenv("ABUSEIPDB_API_KEY"),
             urlscan_api_key=os.getenv("URLSCAN_API_KEY"),
             hybrid_api_key=os.getenv("HYBRID_API_KEY"),
+            mxtoolbox_api_key=os.getenv("MXTOOLBOX_API_KEY"),
+            report_dark=os.getenv("REPORT_DARK", "false").lower() in {"1", "true", "yes"},
+            report_score_details=os.getenv("REPORT_SCORE_DETAILS", "false").lower()
+            in {"1", "true", "yes"},
         )
 
 

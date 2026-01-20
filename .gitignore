@@ -2,3 +2,4 @@
 __pycache__/*
 *.pyc
 eml_analyzer/__pycache__/*
+eml/*

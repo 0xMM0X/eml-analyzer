@@ -11,6 +11,7 @@ from .config import AnalyzerConfig
 from .hybrid_analysis_client import HybridAnalysisClient
 from .eml_parser import EmlParser
 from .log_utils import log
+from .mxtoolbox_client import MxToolboxClient
 from .models import AnalysisReport, MessageAnalysis
 from .urlscan_client import UrlscanClient
 from .virustotal_client import VirusTotalClient
@@ -44,6 +45,11 @@ class EmlAnalyzer:
             if config.hybrid_api_key
             else None
         )
+        self._mxtoolbox_client = (
+            MxToolboxClient(api_key=config.mxtoolbox_api_key)
+            if config.mxtoolbox_api_key
+            else None
+        )
 
     def analyze_path(self, path: str, extract_dir: str | None = None) -> AnalysisReport:
         log(self._verbose, f"Reading EML from {path}")
@@ -68,6 +74,9 @@ class EmlAnalyzer:
         if self._hybrid_client:
             log(self._verbose, "Enriching attachments via Hybrid Analysis")
             self._enrich_hybrid_recursive(root)
+        if self._mxtoolbox_client:
+            log(self._verbose, "Enriching sender domains via MxToolbox")
+            self._enrich_domains_recursive(root)
         statistics = self._build_statistics(root)
         return AnalysisReport(root=root, statistics=statistics)
 
@@ -132,6 +141,23 @@ class EmlAnalyzer:
     def _enrich_hybrid_recursive(self, analysis: MessageAnalysis) -> None:
         seen: dict[str, dict[str, Any]] = {}
         self._enrich_message_hybrid_recursive(analysis, seen)
+
+    def _enrich_domains_recursive(self, analysis: MessageAnalysis) -> None:
+        seen: dict[str, dict[str, Any]] = {}
+        self._enrich_message_domains_recursive(analysis, seen)
+
+    def _enrich_message_domains_recursive(
+        self, analysis: MessageAnalysis, seen: dict[str, dict[str, Any]]
+    ) -> None:
+        for domain in analysis.domains:
+            if domain.domain not in seen:
+                log(self._verbose, f"MxToolbox lookup for domain {domain.domain}")
+                seen[domain.domain] = self._mxtoolbox_client.lookup_domain(domain.domain)
+            domain.mxtoolbox = seen[domain.domain]
+        for attachment in analysis.attachments:
+            nested = attachment.nested_eml
+            if isinstance(nested, MessageAnalysis):
+                self._enrich_message_domains_recursive(nested, seen)
 
     def _enrich_message_hybrid_recursive(
         self, analysis: MessageAnalysis, seen: dict[str, dict[str, Any]]

@@ -6,14 +6,14 @@ import email
 import os
 from email import policy
 from email.message import Message
-from email.utils import getaddresses
+from email.utils import getaddresses, parseaddr
 from typing import Any
 
 from .hashing import hash_bytes
 from .log_utils import log
 from .office_utils import analyze_office_attachment
 from .ip_utils import extract_ips_from_text
-from .models import AttachmentInfo, HeaderAnalysis, IpInfo, MessageAnalysis, UrlInfo
+from .models import AttachmentInfo, DomainInfo, HeaderAnalysis, IpInfo, MessageAnalysis, UrlInfo
 from .url_utils import extract_urls_from_html, extract_urls_from_text
 from .virustotal_client import VirusTotalClient
 
@@ -52,6 +52,7 @@ class EmlParser:
             headers=headers,
             raw_headers=raw_headers,
         )
+        self._extract_sender_domain(analysis)
         self._extract_ips_from_headers(headers, analysis)
 
         for part in msg.walk():
@@ -147,6 +148,15 @@ class EmlParser:
 
         for ip in extract_ips_from_text(text):
             analysis.ips.append(IpInfo(ip=ip, source="body"))
+
+    def _extract_sender_domain(self, analysis: MessageAnalysis) -> None:
+        from_addr = analysis.from_addr or ""
+        addr = parseaddr(from_addr)[1]
+        if not addr or "@" not in addr:
+            return
+        domain = addr.split("@", 1)[1].strip().lower()
+        if domain:
+            analysis.domains.append(DomainInfo(domain=domain))
 
     def _parse_nested_eml(self, part: Message, payload: bytes, depth: int) -> dict[str, Any]:
         if part.get_content_type() == "message/rfc822":
@@ -282,6 +292,13 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "urlscan": item.urlscan,
             }
             for item in analysis.urls
+        ],
+        "domains": [
+            {
+                "domain": item.domain,
+                "mxtoolbox": item.mxtoolbox,
+            }
+            for item in analysis.domains
         ],
         "ips": [
             {"ip": item.ip, "source": item.source, "abuseipdb": item.abuseipdb}

@@ -11,7 +11,17 @@ from .reporting import build_html_report
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze EML files with recursive parsing.")
-    parser.add_argument("--eml", required=True, help="Path to the EML file to analyze.")
+    parser.add_argument(
+        "-f",
+        "--file",
+        dest="eml",
+        help="Path to the EML file to analyze.",
+    )
+    parser.add_argument(
+        "-d",
+        "--dir",
+        help="Analyze all .eml files in a directory.",
+    )
     parser.add_argument(
         "--json",
         nargs="?",
@@ -57,39 +67,65 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
+    if not args.eml and not args.dir:
+        parser.error("Either -f/--file or -d/--dir is required.")
+
     config = AnalyzerConfig.from_env()
     analyzer = EmlAnalyzer(config, verbose=args.verbose)
-    extract_dir = None
-    if args.extract_attachments:
-        extract_dir = args.extract_dir or _default_extract_dir(args.eml)
-    report = analyzer.analyze_path(args.eml, extract_dir=extract_dir)
-    output = analyzer.report_as_dict(report)
-    if not args.score_details:
-        output.get("statistics", {}).pop("risk_breakdown", None)
+    eml_paths = _collect_eml_paths(args.eml, args.dir)
+    if not eml_paths:
+        return 0
 
-    if args.json:
-        json_path = _resolve_output_path(args.eml, args.json, ".json")
-        serialized = json.dumps(output, indent=2)
-        with open(json_path, "w", encoding="utf-8") as handle:
-            handle.write(serialized)
-    elif not args.html:
-        serialized = json.dumps(output, indent=2)
-        sys.stdout.write(serialized + "\n")
+    output_dir = _resolve_output_dir(args.dir, args.json, args.html)
+    if output_dir:
+        import os
 
-    if args.html:
-        theme = "dark" if args.dark else "light"
-        html_report = build_html_report(output, theme=theme, show_score_details=args.score_details)
-        html_path = _resolve_output_path(args.eml, args.html, ".html")
-        with open(html_path, "w", encoding="utf-8") as handle:
-            handle.write(html_report)
+        os.makedirs(output_dir, exist_ok=True)
+
+    total = len(eml_paths)
+    for index, eml_path in enumerate(eml_paths, start=1):
+        if args.dir:
+            sys.stderr.write(f"[{index}/{total}] Analyzing {eml_path}\n")
+        extract_dir = None
+        if args.extract_attachments:
+            extract_dir = args.extract_dir or _default_extract_dir(eml_path)
+        report = analyzer.analyze_path(eml_path, extract_dir=extract_dir)
+        output = analyzer.report_as_dict(report)
+        show_score_details = args.score_details or config.report_score_details
+        if not show_score_details:
+            output.get("statistics", {}).pop("risk_breakdown", None)
+
+        if args.json:
+            json_path = _resolve_output_path(eml_path, args.json, ".json", output_dir)
+            serialized = json.dumps(output, indent=2)
+            with open(json_path, "w", encoding="utf-8") as handle:
+                handle.write(serialized)
+        elif not args.html and len(eml_paths) == 1:
+            serialized = json.dumps(output, indent=2)
+            sys.stdout.write(serialized + "\n")
+
+        if args.html:
+            theme = "dark" if (args.dark or config.report_dark) else "light"
+            score_details = args.score_details or config.report_score_details
+            html_report = build_html_report(output, theme=theme, show_score_details=score_details)
+            html_path = _resolve_output_path(eml_path, args.html, ".html", output_dir)
+            with open(html_path, "w", encoding="utf-8") as handle:
+                handle.write(html_report)
     return 0
 
 
-def _resolve_output_path(eml_path: str, arg_value: object, extension: str) -> str:
+def _resolve_output_path(
+    eml_path: str, arg_value: object, extension: str, output_dir: str | None = None
+) -> str:
     if isinstance(arg_value, str):
         return arg_value
     base, _ = _split_eml_path(eml_path)
-    return f"{base}-report{extension}"
+    filename = f"{base}-report{extension}"
+    if output_dir:
+        import os
+
+        return os.path.join(output_dir, os.path.basename(filename))
+    return filename
 
 
 def _default_extract_dir(eml_path: str) -> str:
@@ -104,6 +140,34 @@ def _split_eml_path(eml_path: str) -> tuple[str, str]:
     filename = os.path.basename(eml_path)
     stem, _ = os.path.splitext(filename)
     return os.path.join(directory, stem), directory
+
+
+def _collect_eml_paths(eml_path: str | None, directory: str | None) -> list[str]:
+    import os
+
+    if eml_path:
+        return [eml_path]
+    if not directory:
+        return []
+    if not os.path.isdir(directory):
+        return []
+    entries = []
+    for name in os.listdir(directory):
+        if name.lower().endswith(".eml"):
+            entries.append(os.path.join(directory, name))
+    return sorted(entries)
+
+
+def _resolve_output_dir(dir_value: str | None, json_value: object, html_value: object) -> str | None:
+    if not dir_value:
+        return None
+    if isinstance(json_value, str):
+        return json_value
+    if isinstance(html_value, str):
+        return html_value
+    import os
+
+    return os.path.join(dir_value, "output")
 
 
 if __name__ == "__main__":
