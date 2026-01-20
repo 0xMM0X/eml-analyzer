@@ -1,5 +1,7 @@
 # EML Analyzer
 
+![Cover](Cover.png)
+
 Full EML triage toolkit built for investigative workflows. It parses message headers and bodies, walks nested EML attachments recursively, extracts URLs, IPs, and attachments, calculates hashes, and enriches findings with threat‑intel lookups. Outputs are available as JSON for deep investigation and as a styled HTML report for quick review.
 
 ## Features
