@@ -132,3 +132,6 @@ Risk level mapping:
 
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
+
+
+### Please feel free to provide any recommendations or contribute enhancements to the tool as you see fit.
