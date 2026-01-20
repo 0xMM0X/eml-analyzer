@@ -5,6 +5,7 @@ from __future__ import annotations
 import email
 import os
 import re
+import mimetypes
 from email import policy
 from email.message import Message
 from email.utils import getaddresses, parseaddr, parsedate_to_datetime
@@ -101,6 +102,7 @@ class EmlParser:
         attachment.office_info = analyze_office_attachment(filename, payload)
         if attachment.office_info:
             log(self._verbose, f"Office analysis: {attachment.office_info}")
+        attachment.header_check = _check_attachment_header(filename, content_type, payload)
 
         if self._extract_dir and payload:
             saved_path = self._write_attachment(payload, filename, content_type, depth)
@@ -474,6 +476,56 @@ def _part_size(part: Message) -> int:
     return len(payload)
 
 
+def _check_attachment_header(
+    filename: str | None, content_type: str, payload: bytes
+) -> dict[str, Any]:
+    if not filename:
+        return {"status": "unknown", "reason": "no_filename"}
+    guess_type, _ = mimetypes.guess_type(filename)
+    if not guess_type:
+        return {"status": "unknown", "reason": "unknown_extension"}
+    header_type = _detect_magic_type(payload)
+    if not header_type:
+        header_type = "unknown"
+    if guess_type.lower() == content_type.lower():
+        return {
+            "status": "match",
+            "guessed_type": guess_type,
+            "content_type": content_type,
+            "header_type": header_type,
+        }
+    return {
+        "status": "mismatch",
+        "guessed_type": guess_type,
+        "content_type": content_type,
+        "header_type": header_type,
+    }
+
+
+def _detect_magic_type(payload: bytes) -> str | None:
+    if not payload:
+        return None
+    if payload.startswith(b"%PDF"):
+        return "application/pdf"
+    if payload.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if payload.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if payload.startswith(b"GIF87a") or payload.startswith(b"GIF89a"):
+        return "image/gif"
+    if payload.startswith(b"PK\x03\x04"):
+        return "application/zip"
+    if payload.startswith(b"MZ"):
+        return "application/x-msdownload"
+    if payload.startswith(b"Rar!\x1a\x07\x00") or payload.startswith(b"Rar!\x1a\x07\x01\x00"):
+        return "application/x-rar-compressed"
+    if payload.startswith(b"\x1f\x8b\x08"):
+        return "application/gzip"
+    if payload.startswith(b"7z\xbc\xaf\x27\x1c"):
+        return "application/x-7z-compressed"
+    return None
+
+
 
 
 def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
@@ -524,6 +576,7 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "vt": item.vt,
                 "hybrid": item.hybrid,
                 "office_info": item.office_info,
+                "header_check": item.header_check,
                 "is_eml": item.is_eml,
                 "saved_path": item.saved_path,
                 "nested_eml": _analysis_to_dict(item.nested_eml)

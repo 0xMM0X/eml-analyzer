@@ -320,6 +320,7 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
                             _hybrid_link(item.get("sha256")),
                         ),
                         "Office Macros": _format_office_summary(item.get("office_info")),
+                        "Header Match": _format_header_check(item.get("header_check")),
                         
                     }
                 )
@@ -591,12 +592,30 @@ def _score_breakdown_table(breakdown: dict[str, Any]) -> str:
     rows.append(
         f"<tr><td>VT Files</td><td>malicious={vt_files.get('malicious', 0)}, suspicious={vt_files.get('suspicious', 0)}</td><td>{breakdown.get('vt_files_points', 0)}</td></tr>"
     )
+    urlscan = breakdown.get("urlscan") or {}
+    rows.append(
+        f"<tr><td>urlscan.io</td><td>malicious={urlscan.get('malicious', 0)}</td><td>{breakdown.get('urlscan_points', 0)}</td></tr>"
+    )
+    hybrid = breakdown.get("hybrid") or {}
+    rows.append(
+        f"<tr><td>Hybrid Analysis</td><td>malicious={hybrid.get('malicious', 0)}, suspicious={hybrid.get('suspicious', 0)}</td><td>{breakdown.get('hybrid_points', 0)}</td></tr>"
+    )
     rows.append(
         f"<tr><td>Executable attachments</td><td>{breakdown.get('executables', 0)}</td><td>{breakdown.get('executables_points', 0)}</td></tr>"
     )
     abuse = breakdown.get("abuseipdb") or {}
     rows.append(
         f"<tr><td>AbuseIPDB</td><td>high={abuse.get('high', 0)}, medium={abuse.get('medium', 0)}, low={abuse.get('low', 0)}</td><td>{breakdown.get('abuse_points', 0)}</td></tr>"
+    )
+    rows.append(
+        f"<tr><td>ARC mismatch</td><td>{breakdown.get('arc_mismatch', 0)}</td><td>{breakdown.get('arc_points', 0)}</td></tr>"
+    )
+    mta = breakdown.get("mta") or {}
+    rows.append(
+        f"<tr><td>MTA anomalies</td><td>inversion={mta.get('received_time_inversion', 0)}, after60m={mta.get('date_after_first_received_over_60m', 0)}, before24h={mta.get('date_before_first_received_over_24h', 0)}, no_received={mta.get('no_received_headers', 0)}, unparsable={mta.get('received_dates_unparsable', 0)}</td><td>{breakdown.get('mta_points', 0)}</td></tr>"
+    )
+    rows.append(
+        f"<tr><td>MxToolbox failed</td><td>{breakdown.get('mx_failed', 0)}</td><td>{breakdown.get('mx_points', 0)}</td></tr>"
     )
     total = breakdown.get("total_before_cap", 0)
     rows.append(f"<tr><td>Total before cap</td><td>{total}</td><td>{total}</td></tr>")
@@ -971,3 +990,21 @@ def _format_macro_tool(office_info: dict[str, Any] | None) -> str:
     if status == "no_modules":
         return "olefile (no modules)"
     return status or "n/a"
+
+
+def _format_header_check(check: dict[str, Any] | None) -> str:
+    if not check:
+        return "unknown"
+    status = check.get("status")
+    if status == "match":
+        guessed = check.get("guessed_type")
+        ctype = check.get("content_type")
+        header = check.get("header_type")
+        return f"match (ext={guessed}, header={ctype}, magic={header})"
+    if status == "mismatch":
+        guessed = check.get("guessed_type")
+        ctype = check.get("content_type")
+        header = check.get("header_type")
+        return f"mismatch (ext={guessed}, header={ctype}, magic={header})"
+    reason = check.get("reason")
+    return f"unknown ({reason})" if reason else "unknown"

@@ -185,7 +185,9 @@ class EmlAnalyzer:
         ip_count = len(ips)
         unique_ips = len({item.ip for item in ips})
         hash_counts = Counter([item.sha256 for item in attachments if item.sha256])
-        risk_score, risk_breakdown = _calculate_risk_score(analysis, urls, attachments)
+        risk_score, risk_breakdown = _calculate_risk_score(
+            analysis, urls, attachments, self._config
+        )
         risk_level = _risk_level_from_score(risk_score)
 
         return {
@@ -234,7 +236,10 @@ def _collect_ips(analysis: MessageAnalysis) -> list[Any]:
 
 
 def _calculate_risk_score(
-    analysis: MessageAnalysis, urls: list[Any], attachments: list[Any]
+    analysis: MessageAnalysis,
+    urls: list[Any],
+    attachments: list[Any],
+    config: AnalyzerConfig,
 ) -> tuple[int, dict[str, Any]]:
     score = 0
     breakdown: dict[str, Any] = {
@@ -244,19 +249,35 @@ def _calculate_risk_score(
         "vt_url_points": 0,
         "vt_files": {"malicious": 0, "suspicious": 0},
         "vt_files_points": 0,
+        "urlscan": {"malicious": 0},
+        "urlscan_points": 0,
+        "hybrid": {"malicious": 0, "suspicious": 0},
+        "hybrid_points": 0,
+        "mx_failed": 0,
+        "mx_points": 0,
         "executables": 0,
         "executables_points": 0,
         "abuseipdb": {"high": 0, "medium": 0, "low": 0},
         "abuse_points": 0,
+        "arc_mismatch": 0,
+        "arc_points": 0,
+        "mta": {
+            "received_time_inversion": 0,
+            "date_after_first_received_over_60m": 0,
+            "date_before_first_received_over_24h": 0,
+            "no_received_headers": 0,
+            "received_dates_unparsable": 0,
+        },
+        "mta_points": 0,
     }
 
     auth_results = analysis.headers.auth_results
     for key in ("spf", "dkim", "dmarc"):
         value = auth_results.get(key, "").lower()
         if "fail" in value or "softfail" in value:
-            score += 2
+            score += config.score_auth_fail
             breakdown["auth_failures"].append(key)
-            breakdown["auth_points"] += 2
+            breakdown["auth_points"] += config.score_auth_fail
 
     for url in urls:
         vt_mal, vt_susp = _vt_counts(url.vt)
@@ -264,7 +285,11 @@ def _calculate_risk_score(
             breakdown["vt_url"]["malicious"] += 1
         if vt_susp:
             breakdown["vt_url"]["suspicious"] += 1
-        vt_score = _score_from_vt(url.vt, malicious_weight=5, suspicious_weight=3)
+        vt_score = _score_from_vt(
+            url.vt,
+            malicious_weight=config.score_vt_url_malicious,
+            suspicious_weight=config.score_vt_url_suspicious,
+        )
         breakdown["vt_url_points"] += vt_score
         score += vt_score
 
@@ -274,17 +299,38 @@ def _calculate_risk_score(
             breakdown["vt_files"]["malicious"] += 1
         if vt_susp:
             breakdown["vt_files"]["suspicious"] += 1
-        vt_score = _score_from_vt(attachment.vt, malicious_weight=6, suspicious_weight=3)
+        vt_score = _score_from_vt(
+            attachment.vt,
+            malicious_weight=config.score_vt_file_malicious,
+            suspicious_weight=config.score_vt_file_suspicious,
+        )
         breakdown["vt_files_points"] += vt_score
         score += vt_score
         if _is_executable_attachment(attachment):
-            score += 1
+            score += config.score_executable
             breakdown["executables"] += 1
-            breakdown["executables_points"] += 1
+            breakdown["executables_points"] += config.score_executable
+
+        hybrid_score = _score_from_hybrid(
+            attachment.hybrid,
+            malicious_weight=config.score_hybrid_malicious,
+            suspicious_weight=config.score_hybrid_suspicious,
+        )
+        if hybrid_score:
+            breakdown["hybrid_points"] += hybrid_score
+            score += hybrid_score
+            mal, susp = _hybrid_counts(attachment.hybrid)
+            breakdown["hybrid"]["malicious"] += mal
+            breakdown["hybrid"]["suspicious"] += susp
 
     ips = _collect_ips(analysis)
     for ip in ips:
-        abuse_score = _score_from_abuse(ip.abuseipdb)
+        abuse_score = _score_from_abuse(
+            ip.abuseipdb,
+            config.score_abuse_high,
+            config.score_abuse_medium,
+            config.score_abuse_low,
+        )
         if abuse_score >= 5:
             breakdown["abuseipdb"]["high"] += 1
         elif abuse_score >= 3:
@@ -293,6 +339,39 @@ def _calculate_risk_score(
             breakdown["abuseipdb"]["low"] += 1
         breakdown["abuse_points"] += abuse_score
         score += abuse_score
+
+    for url in urls:
+        urlscan_score = _score_from_urlscan(url.urlscan, config.score_urlscan_malicious)
+        if urlscan_score:
+            breakdown["urlscan_points"] += urlscan_score
+            score += urlscan_score
+            breakdown["urlscan"]["malicious"] += 1
+
+    arc_status = analysis.headers.arc_chain.get("status")
+    if arc_status and arc_status != "ok":
+        breakdown["arc_mismatch"] = 1
+        breakdown["arc_points"] += config.score_arc_mismatch
+        score += config.score_arc_mismatch
+
+    mta_codes = set(analysis.headers.mta_anomalies or [])
+    for code, weight in (
+        ("received_time_inversion", config.score_mta_inversion),
+        ("date_after_first_received_over_60m", config.score_mta_date_after_60m),
+        ("date_before_first_received_over_24h", config.score_mta_date_before_24h),
+        ("no_received_headers", config.score_no_received),
+        ("received_dates_unparsable", config.score_received_unparsable),
+    ):
+        if code in mta_codes:
+            breakdown["mta"][code] += 1
+            breakdown["mta_points"] += weight
+            score += weight
+
+    for domain in analysis.domains:
+        mx_failed = _mxtoolbox_failed_count(domain.mxtoolbox)
+        if mx_failed:
+            breakdown["mx_failed"] += mx_failed
+            breakdown["mx_points"] += mx_failed * config.score_mx_failed
+            score += mx_failed * config.score_mx_failed
 
     breakdown["total_before_cap"] = score
     if score > 10:
@@ -318,7 +397,9 @@ def _score_from_vt(
     return score
 
 
-def _score_from_abuse(abuse_result: dict[str, Any] | None) -> int:
+def _score_from_abuse(
+    abuse_result: dict[str, Any] | None, high: int, medium: int, low: int
+) -> int:
     if not abuse_result or abuse_result.get("status") != "ok":
         return 0
     data = (abuse_result.get("data") or {}).get("data", {})
@@ -330,11 +411,11 @@ def _score_from_abuse(abuse_result: dict[str, Any] | None) -> int:
     except (TypeError, ValueError):
         return 0
     if confidence_value >= 80:
-        return 5
+        return high
     if confidence_value >= 50:
-        return 3
+        return medium
     if confidence_value >= 25:
-        return 1
+        return low
     return 0
 
 
@@ -347,6 +428,67 @@ def _vt_counts(vt_result: dict[str, Any] | None) -> tuple[int, int]:
     malicious = int(stats.get("malicious", 0) or 0)
     suspicious = int(stats.get("suspicious", 0) or 0)
     return (1 if malicious > 0 else 0, 1 if suspicious > 0 else 0)
+
+
+def _score_from_urlscan(urlscan: dict[str, Any] | None, weight: int) -> int:
+    if not urlscan or urlscan.get("status") != "ok":
+        return 0
+    data = urlscan.get("data") or {}
+    verdicts = data.get("verdicts", {})
+    overall = verdicts.get("overall", {})
+    malicious = overall.get("malicious")
+    if malicious is True:
+        return weight
+    return 0
+
+
+def _score_from_hybrid(
+    hybrid: dict[str, Any] | None, malicious_weight: int, suspicious_weight: int
+) -> int:
+    if not hybrid or hybrid.get("status") != "ok":
+        return 0
+    data = hybrid.get("data")
+    if not isinstance(data, list) or not data:
+        return 0
+    score = 0
+    for item in data:
+        verdict = str(item.get("verdict", "")).lower()
+        if verdict == "malicious":
+            score += malicious_weight
+        elif verdict == "suspicious":
+            score += suspicious_weight
+    return score
+
+
+def _hybrid_counts(hybrid: dict[str, Any] | None) -> tuple[int, int]:
+    if not hybrid or hybrid.get("status") != "ok":
+        return (0, 0)
+    data = hybrid.get("data")
+    if not isinstance(data, list) or not data:
+        return (0, 0)
+    mal = 0
+    susp = 0
+    for item in data:
+        verdict = str(item.get("verdict", "")).lower()
+        if verdict == "malicious":
+            mal += 1
+        elif verdict == "suspicious":
+            susp += 1
+    return (mal, susp)
+
+
+def _mxtoolbox_failed_count(mx: dict[str, Any] | None) -> int:
+    if not mx or mx.get("status") != "ok":
+        return 0
+    data = mx.get("data")
+    if isinstance(data, list) and data:
+        data = data[0]
+    if not isinstance(data, dict):
+        return 0
+    failed = data.get("Failed") or data.get("failed") or []
+    if isinstance(failed, list):
+        return len(failed)
+    return 0
 
 
 def _is_executable_attachment(attachment: Any) -> bool:

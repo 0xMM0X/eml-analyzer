@@ -110,6 +110,7 @@ You can set these once in `.env` (see `.env.example`).
 Report defaults:
 - `REPORT_DARK`: Use dark mode HTML by default (true/false)
 - `REPORT_SCORE_DETAILS`: Include score breakdown by default (true/false)
+- `SCORE_*`: Risk scoring weights (see `.env.example` for full list)
 
 ## Output
 The report is JSON containing root message analysis, nested EML details, URL findings, attachment hashes, optional VirusTotal results, and `risk_score`/`risk_level` fields in `statistics`.
@@ -129,4 +130,3 @@ Risk level mapping:
 
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
-

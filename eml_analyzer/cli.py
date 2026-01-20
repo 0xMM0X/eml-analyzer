@@ -106,9 +106,12 @@ def main(argv: list[str] | None = None) -> int:
         os.makedirs(output_dir, exist_ok=True)
 
     total = len(eml_paths)
+    start_time = _monotonic()
     for index, eml_path in enumerate(eml_paths, start=1):
-        if args.dir:
-            sys.stderr.write(f"[{index}/{total}] Analyzing {eml_path}\n")
+        if args.dir or total > 1:
+            eta = _estimate_eta(start_time, index - 1, total)
+            eta_text = f", eta {eta}" if eta else ""
+            sys.stderr.write(f"[{index}/{total}] Analyzing {eml_path}{eta_text}\n")
         extract_dir = None
         if args.extract_attachments:
             extract_dir = args.extract_dir or _default_extract_dir(eml_path)
@@ -219,6 +222,24 @@ def _resolve_output_dir(dir_value: str | None, json_value: object, html_value: o
     import os
 
     return os.path.join(dir_value, "output")
+
+
+def _monotonic() -> float:
+    import time
+
+    return time.monotonic()
+
+
+def _estimate_eta(start: float, completed: int, total: int) -> str:
+    if completed <= 0:
+        return ""
+    elapsed = _monotonic() - start
+    avg = elapsed / completed
+    remaining = int(max((total - completed) * avg, 0))
+    minutes, seconds = divmod(remaining, 60)
+    if minutes:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
 
 
 if __name__ == "__main__":
