@@ -99,6 +99,14 @@ def build_html_report(
         parts.append(".copy-btn{margin-left:6px;border:none;background:transparent;cursor:pointer;color:#6c5b47;font-size:0.9rem;opacity:0;transition:opacity 0.15s ease;}")
         parts.append(".copy-btn:hover{color:#1b1a18;}")
     parts.append("td:hover .copy-btn{opacity:1;}")
+    parts.append(".tool-actions{display:flex;gap:8px;margin:8px 0;}")
+    parts.append(".tool-actions button{border:none;border-radius:999px;padding:4px 10px;cursor:pointer;font-size:0.8rem;font-weight:bold;}")
+    if theme == "dark":
+        parts.append(".tool-actions button{background:#24344d;color:#eaf1fb;}")
+        parts.append(".tool-actions button:hover{background:#2f4566;}")
+    else:
+        parts.append(".tool-actions button{background:#efe3d1;color:#2a241d;}")
+        parts.append(".tool-actions button:hover{background:#e7d8c3;}")
     parts.append(".status-pass{color:#1f6f3b;font-weight:bold;}")
     parts.append(".status-fail{color:#b02a2a;font-weight:bold;}")
     parts.append(".status-neutral{color:#6b5b4a;font-weight:bold;}")
@@ -147,6 +155,16 @@ def build_html_report(
     parts.append(".raw-block{max-height:180px;overflow:auto;word-break:break-word;}")
     parts.append(".spacer{height:10px;}")
     parts.append("</style>")
+    parts.append("<script>")
+    parts.append(
+        "function toggleClosestTool(btn, open) {"
+        "  var container = btn.closest('.tool-section');"
+        "  if (!container) return;"
+        "  var items = container.querySelectorAll('details');"
+        "  items.forEach(function(item){ item.open = open; });"
+        "}"
+    )
+    parts.append("</script>")
     parts.append("</head>")
     parts.append("<body>")
     parts.append("<div class=\"container\">")
@@ -303,7 +321,7 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
     if attachments:
         parts.append("<div class=\"section\"><h3>Attachments</h3>")
         parts.append("<div class=\"card-stack\">")
-        for item in attachments:
+        for idx, item in enumerate(attachments):
             parts.append("<div class=\"card\">")
             attachment_rows: dict[str, Any] = {
                 "Filename": item.get("filename"),
@@ -347,7 +365,13 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
                 parts.append("</div>")
             pdf_info = item.get("pdf_info") or {}
             if pdf_info:
-                parts.append("<div class=\"section\"><h3>PDF Tools</h3>")
+                parts.append("<div class=\"section tool-section\"><h3>PDF Tools</h3>")
+                parts.append(
+                    "<div class=\"tool-actions\">"
+                    "<button onclick=\"toggleClosestTool(this, true)\">Expand All</button>"
+                    "<button onclick=\"toggleClosestTool(this, false)\">Collapse All</button>"
+                    "</div>"
+                )
                 tool_name = html.escape(str(pdf_info.get("tool") or "peepdf"))
                 status = html.escape(str(pdf_info.get("status") or "unknown"))
                 parts.append("<details>")
@@ -441,7 +465,13 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
             office_info = item.get("office_info") or {}
             tool_results = office_info.get("tool_results") or []
             if tool_results:
-                parts.append("<div class=\"section\"><h3>Macro Tools</h3>")
+                parts.append("<div class=\"section tool-section\"><h3>Macro Tools</h3>")
+                parts.append(
+                    "<div class=\"tool-actions\">"
+                    "<button onclick=\"toggleClosestTool(this, true)\">Expand All</button>"
+                    "<button onclick=\"toggleClosestTool(this, false)\">Collapse All</button>"
+                    "</div>"
+                )
                 for tool in tool_results:
                     tool_name = html.escape(str(tool.get("tool") or "tool"))
                     tool_status = html.escape(str(tool.get("status") or "unknown"))

@@ -271,11 +271,10 @@ def _normalize_preview(text: str, raw_bytes: bytes | None) -> str:
     printable = sum(1 for ch in text if ch.isprintable() or ch in "\r\n\t")
     ratio = printable / max(len(text), 1)
     if ratio < 0.65 and raw_bytes is not None:
-        decompressed = _try_inflate(raw_bytes)
-        if decompressed:
-            return decompressed
-        # Fallback: show hex preview instead of placeholder
-        return _hex_preview(raw_bytes, 256)
+        decoded = _try_inflate(raw_bytes)
+        if decoded:
+            return decoded
+        return text
     return text
 
 
@@ -293,13 +292,6 @@ def _try_inflate(raw_bytes: bytes) -> str | None:
         return data.decode("latin-1", errors="replace")
 
 
-def _hex_preview(raw_bytes: bytes, limit: int) -> str:
-    preview = raw_bytes[:limit]
-    hex_text = preview.hex()
-    grouped = " ".join(hex_text[i:i+2] for i in range(0, len(hex_text), 2))
-    if len(raw_bytes) > limit:
-        return f"[hex preview, truncated]\n{grouped}"
-    return f"[hex preview]\n{grouped}"
 
 
 def _run_pdfid(path: str) -> dict[str, Any]:
