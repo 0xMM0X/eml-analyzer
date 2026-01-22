@@ -1212,3 +1212,4 @@ def _format_header_check(check: dict[str, Any] | None) -> str:
         return f"mismatch (ext={guessed}, header={ctype}, magic={header})"
     reason = check.get("reason")
     return f"unknown ({reason})" if reason else "unknown"
+    
