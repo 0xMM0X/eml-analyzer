@@ -18,6 +18,7 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - JSON and HTML reporting output
 - Sender domain MX checks via MxToolbox (optional)
 - Office macro extraction with oletools/olefile support
+- PDF attachment analysis with peepdf (optional) + structure heuristics (JS/Launch/Embedded)
 - MIME structure visualization in the HTML report
 - Directory scans with include/exclude patterns
 - Timing drift and MTA anomaly detection
@@ -41,6 +42,24 @@ Preferred (olevba decoding for macro extraction):
 
 ```bash
 pip install oletools
+```
+
+Optional (PDF attachment analysis):
+
+```bash
+pip install peepdf-3
+```
+
+Optional (pdfid from pip):
+
+```bash
+pip install pdfid
+```
+
+Optional (pdf-parser.py from DidierStevensSuite) OR just set the tool installing flag to true:
+
+```bash
+curl -L https://raw.githubusercontent.com/DidierStevens/DidierStevensSuite/master/pdf-parser.py -o pdf-parser.py
 ```
 
 ## Usage
@@ -115,6 +134,7 @@ Report defaults:
 - `REPORT_DARK`: Use dark mode HTML by default (true/false)
 - `REPORT_SCORE_DETAILS`: Include score breakdown by default (true/false)
 - `SCORE_*`: Risk scoring weights (see `.env.example` for full list)
+- `TOOLS_AUTO_DOWNLOAD`: Auto-download external tools if missing (true/false)
 
 ## Output
 The report is JSON containing root message analysis, nested EML details, URL findings, attachment hashes, optional VirusTotal results, and `risk_score`/`risk_level` fields in `statistics`.
@@ -134,6 +154,8 @@ Risk level mapping:
 
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
+- Correlation view across multiple EMLs in directory scans
+- Add automated PDF structure heuristics (JS, launch actions, embedded files)
 
 
 ### Please feel free to provide any recommendations or contribute enhancements to the tool as you see fit.

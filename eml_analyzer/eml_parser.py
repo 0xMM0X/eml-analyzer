@@ -15,6 +15,7 @@ from typing import Any
 from .hashing import hash_bytes
 from .log_utils import log
 from .office_utils import analyze_office_attachment
+from .pdf_utils import analyze_pdf_attachment
 from .ip_utils import extract_ips_from_text
 from .models import AttachmentInfo, DomainInfo, HeaderAnalysis, IpInfo, MessageAnalysis, UrlInfo
 from .url_utils import extract_urls_from_html, extract_urls_from_text
@@ -103,6 +104,9 @@ class EmlParser:
         if attachment.office_info:
             log(self._verbose, f"Office analysis: {attachment.office_info}")
         attachment.header_check = _check_attachment_header(filename, content_type, payload)
+        attachment.pdf_info = analyze_pdf_attachment(filename, payload)
+        if attachment.pdf_info:
+            log(self._verbose, f"PDF analysis: {attachment.pdf_info}")
 
         if self._extract_dir and payload:
             saved_path = self._write_attachment(payload, filename, content_type, depth)
@@ -576,6 +580,7 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "vt": item.vt,
                 "hybrid": item.hybrid,
                 "office_info": item.office_info,
+                "pdf_info": item.pdf_info,
                 "header_check": item.header_check,
                 "is_eml": item.is_eml,
                 "saved_path": item.saved_path,

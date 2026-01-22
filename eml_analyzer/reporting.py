@@ -80,6 +80,10 @@ def build_html_report(
         parts.append(".section + .section{border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;}")
     else:
         parts.append(".section + .section{border-top:1px solid rgba(0,0,0,0.08);padding-top:12px;}")
+    if theme == "dark":
+        parts.append(".note{margin-top:8px;padding:6px 10px;border-radius:10px;background:#1b2638;border:1px solid #2a3850;color:#a9b7cc;font-size:0.85rem;}")
+    else:
+        parts.append(".note{margin-top:8px;padding:6px 10px;border-radius:10px;background:#f6efe4;border:1px solid #e4d7c4;color:#5b4e3d;font-size:0.85rem;}")
     parts.append(".card-stack{display:flex;flex-direction:column;gap:12px;}")
     parts.append(
         ".tag{display:inline-block;background:#1b1a18;color:#fff;border-radius:6px;padding:2px 8px;font-size:0.8rem;}"
@@ -140,6 +144,7 @@ def build_html_report(
         parts.append(".code-block{background:#0f1622;color:#e5eef9;border:1px solid #2f3d52;border-radius:10px;padding:10px;overflow:auto;white-space:pre-wrap;}")
     else:
         parts.append(".code-block{background:#f8f3ea;color:#2a241d;border:1px solid #d6c8b3;border-radius:10px;padding:10px;overflow:auto;white-space:pre-wrap;}")
+    parts.append(".raw-block{max-height:180px;overflow:auto;word-break:break-word;}")
     parts.append(".spacer{height:10px;}")
     parts.append("</style>")
     parts.append("</head>")
@@ -300,35 +305,138 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
         parts.append("<div class=\"card-stack\">")
         for item in attachments:
             parts.append("<div class=\"card\">")
-            parts.append(
-                _key_value_table(
-                    {
-                        "Filename": item.get("filename"),
-                        "Content Type": item.get("content_type"),
-                        "Size": item.get("size"),
-                        "MD5": item.get("md5"),
-                        "SHA1": item.get("sha1"),
-                        "SHA256": item.get("sha256"),
-                        "Saved Path": item.get("saved_path"),
-                        "Is EML": item.get("is_eml"),
-                        "VT": _with_icon_link(
-                            _format_vt_summary(item.get("vt")),
-                            _vt_file_link(item.get("sha256")),
-                        ),
-                        "Hybrid": _with_icon_link(
-                            _format_hybrid_summary(item.get("hybrid")),
-                            _hybrid_link(item.get("sha256")),
-                        ),
-                        "Office Macros": _format_office_summary(item.get("office_info")),
-                        "Header Match": _format_header_check(item.get("header_check")),
-                        
-                    }
+            attachment_rows: dict[str, Any] = {
+                "Filename": item.get("filename"),
+                "Content Type": item.get("content_type"),
+                "Size": item.get("size"),
+                "MD5": item.get("md5"),
+                "SHA1": item.get("sha1"),
+                "SHA256": item.get("sha256"),
+            }
+            saved_path = item.get("saved_path")
+            if saved_path:
+                attachment_rows["Saved Path"] = saved_path
+            if item.get("is_eml") is True:
+                attachment_rows["Is EML"] = True
+            if item.get("vt") is not None:
+                attachment_rows["VT"] = _with_icon_link(
+                    _format_vt_summary(item.get("vt")),
+                    _vt_file_link(item.get("sha256")),
                 )
-            )
+            if item.get("hybrid") is not None:
+                attachment_rows["Hybrid"] = _with_icon_link(
+                    _format_hybrid_summary(item.get("hybrid")),
+                    _hybrid_link(item.get("sha256")),
+                )
+            if item.get("office_info"):
+                attachment_rows["Office Macros"] = _format_office_summary(
+                    item.get("office_info")
+                )
+            if item.get("pdf_info"):
+                attachment_rows["PDF Analysis"] = _format_pdf_summary(item.get("pdf_info"))
+                attachment_rows["PDF Heuristics"] = _format_pdf_heuristics(
+                    item.get("pdf_info")
+                )
+            if item.get("header_check"):
+                attachment_rows["Header Match"] = _format_header_check(item.get("header_check"))
+            parts.append(_key_value_table(attachment_rows))
             nested = item.get("nested_eml")
             if isinstance(nested, dict):
                 parts.append("<div class=\"section\"><h3>Nested Message</h3>")
                 parts.append(_render_message(nested, depth + 1))
+                parts.append("</div>")
+            pdf_info = item.get("pdf_info") or {}
+            if pdf_info:
+                parts.append("<div class=\"section\"><h3>PDF Tools</h3>")
+                tool_name = html.escape(str(pdf_info.get("tool") or "peepdf"))
+                status = html.escape(str(pdf_info.get("status") or "unknown"))
+                parts.append("<details>")
+                parts.append(f"<summary>{tool_name} ({status})</summary>")
+                error = pdf_info.get("error")
+                if error:
+                    parts.append(f"<div class=\"note\">{html.escape(str(error))}</div>")
+                objects_detail = pdf_info.get("objects_detail") or []
+                if objects_detail:
+                    parts.append("<div class=\"section\"><h4>Objects (decoded)</h4>")
+                    for obj in objects_detail:
+                        preview = obj.get("decoded_preview") or ""
+                        if not preview:
+                            continue
+                        obj_id = obj.get("id")
+                        parts.append("<details>")
+                        parts.append(f"<summary>Object {obj_id}</summary>")
+                        parts.append(
+                            f"<pre class=\"code-block\">{html.escape(str(preview))}</pre>"
+                        )
+                        if obj.get("decoded_truncated"):
+                            parts.append("<div class=\"note\">Object preview truncated.</div>")
+                        parts.append("</details>")
+                    if pdf_info.get("objects_truncated"):
+                        parts.append("<div class=\"note\">Objects list truncated.</div>")
+                    parts.append("</div>")
+                streams_detail = pdf_info.get("streams_detail") or []
+                if streams_detail:
+                    parts.append("<div class=\"section\"><h4>Streams (decoded)</h4>")
+                    for stream in streams_detail:
+                        stream_id = stream.get("id")
+                        preview = stream.get("decoded_preview") or ""
+                        if not preview:
+                            continue
+                        parts.append("<details>")
+                        parts.append(f"<summary>Stream {stream_id}</summary>")
+                        parts.append(
+                            f"<pre class=\"code-block\">{html.escape(str(preview))}</pre>"
+                        )
+                        if stream.get("decoded_truncated"):
+                            parts.append("<div class=\"note\">Decoded stream truncated.</div>")
+                        parts.append("</details>")
+                    if pdf_info.get("streams_truncated"):
+                        parts.append("<div class=\"note\">Streams list truncated.</div>")
+                    parts.append("</div>")
+                parts.append("</details>")
+
+                pdfid = pdf_info.get("pdfid") or {}
+                if pdfid:
+                    pdfid_status = html.escape(str(pdfid.get("status") or "unknown"))
+                    if pdfid.get("status") == "missing":
+                        parts.append("<details>")
+                        parts.append("<summary>pdfid (missing)</summary>")
+                        parts.append("<div class=\"note\">pdfid: not installed</div>")
+                        parts.append("</details>")
+                    else:
+                        parts.append("<details>")
+                        parts.append(f"<summary>pdfid ({pdfid_status})</summary>")
+                        counts = pdfid.get("counts") or {}
+                        if counts:
+                            parts.append(_key_value_table(counts))
+                        output = pdfid.get("output")
+                        if output:
+                            parts.append(
+                                f"<pre class=\"code-block raw-block\">{html.escape(str(output))}</pre>"
+                            )
+                        if pdfid.get("truncated"):
+                            parts.append("<div class=\"note\">pdfid output truncated.</div>")
+                        parts.append("</details>")
+
+                pdf_parser = pdf_info.get("pdf_parser") or {}
+                if pdf_parser:
+                    parser_status = html.escape(str(pdf_parser.get("status") or "unknown"))
+                    if pdf_parser.get("status") == "missing":
+                        parts.append("<details>")
+                        parts.append("<summary>pdf-parser (missing)</summary>")
+                        parts.append("<div class=\"note\">pdf-parser: not installed</div>")
+                        parts.append("</details>")
+                    else:
+                        parts.append("<details>")
+                        parts.append(f"<summary>pdf-parser ({parser_status})</summary>")
+                        output = pdf_parser.get("output")
+                        if output:
+                            parts.append(
+                                f"<pre class=\"code-block raw-block\">{html.escape(str(output))}</pre>"
+                            )
+                        if pdf_parser.get("truncated"):
+                            parts.append("<div class=\"note\">pdf-parser output truncated.</div>")
+                        parts.append("</details>")
                 parts.append("</div>")
             office_info = item.get("office_info") or {}
             tool_results = office_info.get("tool_results") or []
@@ -390,6 +498,21 @@ def _key_value_table(items: dict[str, Any]) -> str:
         rows.append(
             f"<tr><th>{safe_key}</th><td>{_cell_value(safe_value, value)}</td></tr>"
         )
+    rows.append("</table>")
+    return "\n".join(rows)
+
+
+def _simple_table(headers: list[str], rows_in: list[list[Any]]) -> str:
+    rows = []
+    rows.append("<table>")
+    header_cells = "".join(f"<th>{html.escape(h)}</th>" for h in headers)
+    rows.append(f"<tr>{header_cells}</tr>")
+    for row in rows_in:
+        cells = []
+        for value in row:
+            safe_value = _format_table_value(value)
+            cells.append(f"<td>{_cell_value(safe_value, value)}</td>")
+        rows.append(f"<tr>{''.join(cells)}</tr>")
     rows.append("</table>")
     return "\n".join(rows)
 
@@ -515,6 +638,15 @@ def _arc_chain_table(arc_chain: dict[str, Any]) -> str:
         rows.append("<table>")
         rows.append("<tr><th>Type</th><th>i</th><th>d</th><th>s</th><th>cv</th><th>Raw</th></tr>")
         for item in details:
+            raw_value = str(item.get("raw", "") or "")
+            raw_cell = ""
+            if raw_value:
+                raw_cell = (
+                    "<details>"
+                    "<summary>View</summary>"
+                    f"<pre class=\"code-block raw-block\">{html.escape(raw_value)}</pre>"
+                    "</details>"
+                )
             rows.append(
                 "<tr>"
                 f"<td>{html.escape(str(item.get('type', '')))}</td>"
@@ -522,7 +654,7 @@ def _arc_chain_table(arc_chain: dict[str, Any]) -> str:
                 f"<td>{html.escape(str(item.get('d', '')))}</td>"
                 f"<td>{html.escape(str(item.get('s', '')))}</td>"
                 f"<td>{html.escape(str(item.get('cv', '')))}</td>"
-                f"<td>{html.escape(str(item.get('raw', '')))}</td>"
+                f"<td>{raw_cell}</td>"
                 "</tr>"
             )
         rows.append("</table>")
@@ -966,6 +1098,48 @@ def _format_office_summary(office_info: dict[str, Any] | None) -> str:
     if hits:
         return f"{office_info.get('office_type', 'office')}: {hits[0]}"
     return f"{office_info.get('office_type', 'office')}: macros present"
+
+
+def _format_pdf_summary(pdf_info: dict[str, Any] | None) -> str:
+    if not pdf_info:
+        return "none"
+    tool = pdf_info.get("tool", "peepdf")
+    status = pdf_info.get("status")
+    if status == "missing":
+        return f"{tool}: not installed"
+    if status == "error":
+        error = pdf_info.get("error", "unknown error")
+        return f"{tool}: error - {error}"
+    parts = []
+    version = pdf_info.get("version")
+    if version:
+        parts.append(f"v{version}")
+    objects = pdf_info.get("objects")
+    if objects is not None:
+        parts.append(f"objects={objects}")
+    streams = pdf_info.get("streams")
+    if streams is not None:
+        parts.append(f"streams={streams}")
+    detail = ", ".join(parts) if parts else "ok"
+    return f"{tool}: {detail}"
+
+
+def _format_pdf_heuristics(pdf_info: dict[str, Any] | None) -> str:
+    if not pdf_info:
+        return "none"
+    heuristics = pdf_info.get("heuristics") or {}
+    js = heuristics.get("javascript")
+    launch = heuristics.get("launch_actions")
+    embedded = heuristics.get("embedded_files")
+    indicators = heuristics.get("indicators") or []
+    parts = [
+        f"js={js}" if js is not None else "js=0",
+        f"launch={launch}" if launch is not None else "launch=0",
+        f"embedded={embedded}" if embedded is not None else "embedded=0",
+    ]
+    if indicators:
+        parts.append(f"indicators: {', '.join(indicators)}")
+    return " | ".join(parts)
 
 
 def _format_macro_parse(office_info: dict[str, Any] | None) -> str:

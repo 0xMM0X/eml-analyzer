@@ -18,6 +18,7 @@ class AttachmentInfo:
     nested_eml: Any | None = None
     saved_path: str | None = None
     office_info: dict[str, Any] | None = None
+    pdf_info: dict[str, Any] | None = None
     header_check: dict[str, Any] | None = None
 
 
