@@ -24,7 +24,7 @@ def build_html_report(
     parts.append("<style>")
     if theme == "dark":
         parts.append(
-            "body{font-family:'Times New Roman',serif;background:radial-gradient(circle at 10% 0%,#243149,#141c2b 55%,#0c111a);color:#e8edf5;margin:0;padding:24px;}"
+            "body{font-family:'Times New Roman',serif;background:radial-gradient(circle at 12% 0%,#223036,#141b20 62%,#10151a);color:#e6edf2;margin:0;padding:24px;}"
         )
     else:
         parts.append(
@@ -35,7 +35,7 @@ def build_html_report(
     )
     if theme == "dark":
         parts.append(
-            ".card{background:linear-gradient(180deg,#172235,#101826);border:1px solid #2a3850;border-radius:16px;padding:18px;box-shadow:0 16px 36px rgba(0,0,0,0.55);}"
+            ".card{background:linear-gradient(180deg,#1d252c,#141b21);border:1px solid #2a3a42;border-radius:16px;padding:18px;box-shadow:0 16px 36px rgba(0,0,0,0.55);}"
         )
     else:
         parts.append(
@@ -55,33 +55,33 @@ def build_html_report(
         "th,td{border-bottom:1px solid #efe7db;padding:8px 10px;text-align:left;vertical-align:top;font-size:0.95rem;}"
     )
     if theme == "dark":
-        parts.append("th{background:#1f2c41;font-weight:bold;color:#e8edf5;}")
-        parts.append("tr:nth-child(even) td{background:#141d2b;}")
-        parts.append("tr:hover td{background:#23344d;}")
+        parts.append("th{background:#2a3a42;font-weight:bold;color:#e6edf2;}")
+        parts.append("tr:nth-child(even) td{background:#182027;}")
+        parts.append("tr:hover td{background:#22303a;}")
     else:
         parts.append("th{background:#efe5d5;font-weight:bold;color:#2a241d;}")
         parts.append("tr:nth-child(even) td{background:#fbf8f2;}")
         parts.append("tr:hover td{background:#f3eadc;}")
     if theme == "dark":
-        parts.append(".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#24344d;font-weight:bold;color:#eaf1fb;}")
-        parts.append(".small{color:#a9b7cc;font-size:0.9em;}")
+        parts.append(".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#2a3a42;font-weight:bold;color:#e6edf2;}")
+        parts.append(".small{color:#aebcc6;font-size:0.9em;}")
     else:
         parts.append(".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#efe3d1;font-weight:bold;color:#2a241d;}")
         parts.append(".small{color:#5b4e3d;font-size:0.9em;}")
     parts.append(".summary-tile{display:flex;flex-direction:column;gap:6px;}")
     if theme == "dark":
-        parts.append(".summary-tile.highlight{border:1px solid #4a5c74;}")
+        parts.append(".summary-tile.highlight{border:1px solid #3b5661;}")
     else:
         parts.append(".summary-tile.highlight{border:1px solid #b8a48a;}")
     parts.append(".summary-value{font-size:1.4rem;font-weight:bold;}")
     parts.append(".summary-label{letter-spacing:0.02em;text-transform:uppercase;font-size:0.72rem;}")
     parts.append(".section{margin-top:12px;}")
     if theme == "dark":
-        parts.append(".section + .section{border-top:1px solid rgba(255,255,255,0.08);padding-top:12px;}")
+        parts.append(".section + .section{border-top:1px solid rgba(230,237,242,0.12);padding-top:12px;}")
     else:
         parts.append(".section + .section{border-top:1px solid rgba(0,0,0,0.08);padding-top:12px;}")
     if theme == "dark":
-        parts.append(".note{margin-top:8px;padding:6px 10px;border-radius:10px;background:#1b2638;border:1px solid #2a3850;color:#a9b7cc;font-size:0.85rem;}")
+        parts.append(".note{margin-top:8px;padding:6px 10px;border-radius:10px;background:#1d252c;border:1px solid #2a3a42;color:#e6edf2;font-size:0.85rem;}")
     else:
         parts.append(".note{margin-top:8px;padding:6px 10px;border-radius:10px;background:#f6efe4;border:1px solid #e4d7c4;color:#5b4e3d;font-size:0.85rem;}")
     parts.append(".card-stack{display:flex;flex-direction:column;gap:12px;}")
@@ -89,10 +89,10 @@ def build_html_report(
         ".tag{display:inline-block;background:#1b1a18;color:#fff;border-radius:6px;padding:2px 8px;font-size:0.8rem;}"
     )
     if theme == "dark":
-        parts.append(".icon-link{margin-left:6px;text-decoration:none;color:#a9b7cc;font-size:0.9rem;display:inline-block;}")
-        parts.append(".icon-link:hover{color:#eaf1fb;}")
-        parts.append(".copy-btn{margin-left:6px;border:none;background:transparent;cursor:pointer;color:#a9b7cc;font-size:0.9rem;opacity:0;transition:opacity 0.15s ease;}")
-        parts.append(".copy-btn:hover{color:#eaf1fb;}")
+        parts.append(".icon-link{margin-left:6px;text-decoration:none;color:#7fb2c4;font-size:0.9rem;display:inline-block;}")
+        parts.append(".icon-link:hover{color:#9ad1e0;}")
+        parts.append(".copy-btn{margin-left:6px;border:none;background:transparent;cursor:pointer;color:#7fb2c4;font-size:0.9rem;opacity:0;transition:opacity 0.15s ease;}")
+        parts.append(".copy-btn:hover{color:#9ad1e0;}")
     else:
         parts.append(".icon-link{margin-left:6px;text-decoration:none;color:#6c5b47;font-size:0.9rem;display:inline-block;}")
         parts.append(".icon-link:hover{color:#1b1a18;}")
@@ -115,15 +115,15 @@ def build_html_report(
     parts.append(".status-neutral{color:#6b5b4a;font-weight:bold;}")
     parts.append(".badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:0.8rem;font-weight:bold;}")
     if theme == "dark":
-        parts.append(".badge-ok{background:#1f3a2f;color:#bde7cf;}")
-        parts.append(".badge-warn{background:#3a2c16;color:#f7d29c;}")
+        parts.append(".badge-ok{background:#22323a;color:#e6edf2;}")
+        parts.append(".badge-warn{background:#3a2d26;color:#e6edf2;}")
     else:
         parts.append(".badge-ok{background:#e4f2ea;color:#1b5e3c;}")
         parts.append(".badge-warn{background:#fff1d6;color:#8a5a1f;}")
     parts.append(".pill-group{display:inline-flex;flex-wrap:wrap;gap:6px;}")
     parts.append(".mini-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.06);}")
     if theme == "dark":
-        parts.append(".mini-pill{background:rgba(255,255,255,0.1);}")
+        parts.append(".mini-pill{background:rgba(127,178,196,0.18);}")
     parts.append(".received-list{list-style:none;margin:0;padding:0;}")
     parts.append(
         ".received-item{background:#f9f4eb;border:1px solid #e6dccd;border-radius:10px;padding:8px 10px;margin-bottom:8px;}"
