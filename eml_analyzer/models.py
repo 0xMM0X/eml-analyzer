@@ -23,6 +23,8 @@ class AttachmentInfo:
     header_check: dict[str, Any] | None = None
     normalized: dict[str, Any] | None = None
     consensus: dict[str, Any] | None = None
+    password_protected: dict[str, Any] | None = None
+    entropy: dict[str, Any] | None = None
 
 
 @dataclass

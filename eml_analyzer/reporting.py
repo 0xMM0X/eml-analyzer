@@ -385,6 +385,12 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 attachment_rows["PDF Heuristics"] = _format_pdf_heuristics(
                     item.get("pdf_info")
                 )
+            if item.get("password_protected"):
+                attachment_rows["Password Protected"] = _format_password_protection(
+                    item.get("password_protected")
+                )
+            if item.get("entropy"):
+                attachment_rows["Entropy"] = _format_entropy(item.get("entropy"))
             if item.get("header_check"):
                 attachment_rows["Header Match"] = _format_header_check(item.get("header_check"))
             parts.append(_key_value_table(attachment_rows))
@@ -1106,6 +1112,24 @@ def _format_screenshot(screenshot: dict[str, Any] | None) -> str:
         "</a>"
         "</div>"
     )
+
+
+def _format_password_protection(info: dict[str, Any] | None) -> str:
+    if not info:
+        return "none"
+    if info.get("encrypted") is True:
+        return f"{info.get('type', 'file')}: encrypted"
+    if info.get("encrypted") is False:
+        return f"{info.get('type', 'file')}: no encryption"
+    return "unknown"
+
+
+def _format_entropy(info: dict[str, Any] | None) -> str:
+    if not info:
+        return "none"
+    value = info.get("value")
+    classification = info.get("classification", "unknown")
+    return f"{value} ({classification})"
 
 
 def _format_rewrite(item: dict[str, Any], defang_urls: bool) -> str:

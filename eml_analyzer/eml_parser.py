@@ -107,6 +107,8 @@ class EmlParser:
         attachment.pdf_info = analyze_pdf_attachment(filename, payload)
         if attachment.pdf_info:
             log(self._verbose, f"PDF analysis: {attachment.pdf_info}")
+        attachment.password_protected = _detect_password_protection(filename, payload)
+        attachment.entropy = _compute_entropy(payload)
 
         if self._extract_dir and payload:
             saved_path = self._write_attachment(payload, filename, content_type, depth)
@@ -447,6 +449,47 @@ def _normalize_url(value: str) -> str:
     return value.strip().rstrip("/").lower()
 
 
+def _detect_password_protection(filename: str | None, payload: bytes) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    name = (filename or "").lower()
+    if name.endswith(".zip") or payload.startswith(b"PK\x03\x04") or payload.startswith(b"PK\x05\x06") or payload.startswith(b"PK\x07\x08"):
+        # ZIP: check general purpose bit flag for encryption (bit 0)
+        if len(payload) >= 8:
+            flag = int.from_bytes(payload[6:8], "little")
+            encrypted = bool(flag & 0x1)
+            return {"type": "zip", "encrypted": encrypted}
+    if name.endswith(".pdf") or payload.startswith(b"%PDF"):
+        # Look for /Encrypt in PDF trailer
+        encrypted = b"/Encrypt" in payload
+        return {"type": "pdf", "encrypted": encrypted}
+    return None
+
+
+def _compute_entropy(payload: bytes) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    import math
+    if len(payload) < 256:
+        return {"value": 0.0, "classification": "small"}
+    freq = [0] * 256
+    for b in payload:
+        freq[b] += 1
+    entropy = 0.0
+    length = len(payload)
+    for count in freq:
+        if count == 0:
+            continue
+        p = count / length
+        entropy -= p * math.log2(p)
+    classification = "low"
+    if entropy >= 7.5:
+        classification = "high"
+    elif entropy >= 6.5:
+        classification = "medium"
+    return {"value": round(entropy, 3), "classification": classification}
+
+
 
 def _parse_date(value: str | None) -> Any | None:
     if not value:
@@ -652,6 +695,8 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "header_check": item.header_check,
                 "normalized": item.normalized,
                 "consensus": item.consensus,
+                "password_protected": item.password_protected,
+                "entropy": item.entropy,
                 "is_eml": item.is_eml,
                 "saved_path": item.saved_path,
                 "nested_eml": _analysis_to_dict(item.nested_eml)

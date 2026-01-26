@@ -25,6 +25,8 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - Correlation view across multiple EMLs in directory scans (summary report)
 - Timing drift and MTA anomaly detection
 - Attachment magic-byte header verification
+- Attachment password-protection detection (ZIP/PDF)
+- Attachment entropy scoring (packed/encrypted heuristic)
 - IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
 - IP reputation consensus scoring (multi‑source).
 - GeoIP + ASN enrichment for IPs.
@@ -221,13 +223,11 @@ Risk level mapping:
 - Add automated PDF structure heuristics (JS, launch actions, embedded files)
 - Auto-cluster similar emails by subject similarity and sender domain.
 - Thread timeline view (visual hop graph for Received chain).
-- Attachment password-protection detection (zip/pdf).
 - Click‑tracking redirect chain expansion.
 - QR code extraction from images/PDFs.
 - Reply-to vs From mismatch scoring + display.
 - Embedded HTML form extraction + analysis.
 - Risk score explanation as a JSON‑driven policy file.
-- Attachment entropy scoring (packed/encrypted heuristic).
 
 
 
