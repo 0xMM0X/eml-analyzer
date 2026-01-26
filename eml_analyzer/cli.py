@@ -126,7 +126,10 @@ def main(argv: list[str] | None = None) -> int:
         extract_dir = None
         if args.extract_attachments:
             extract_dir = args.extract_dir or _default_extract_dir(eml_path)
-        report = analyzer.analyze_path(eml_path, extract_dir=extract_dir)
+        report = analyzer.analyze_path(
+            eml_path,
+            extract_dir=extract_dir,
+        )
         output = analyzer.report_as_dict(report)
         all_reports.append(output)
         show_score_details = args.score_details or config.report_score_details

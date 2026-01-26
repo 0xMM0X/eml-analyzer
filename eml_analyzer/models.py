@@ -21,6 +21,8 @@ class AttachmentInfo:
     office_info: dict[str, Any] | None = None
     pdf_info: dict[str, Any] | None = None
     header_check: dict[str, Any] | None = None
+    normalized: dict[str, Any] | None = None
+    consensus: dict[str, Any] | None = None
 
 
 @dataclass
@@ -35,6 +37,9 @@ class UrlInfo:
     visible_url: str | None = None
     href_url: str | None = None
     mismatch: bool = False
+    normalized: dict[str, Any] | None = None
+    consensus: dict[str, Any] | None = None
+    screenshot: dict[str, Any] | None = None
 
 
 @dataclass
@@ -42,6 +47,8 @@ class DomainInfo:
     domain: str
     mxtoolbox: dict[str, Any] | None = None
     opentip: dict[str, Any] | None = None
+    normalized: dict[str, Any] | None = None
+    consensus: dict[str, Any] | None = None
 
 
 @dataclass
@@ -50,6 +57,9 @@ class IpInfo:
     source: str
     abuseipdb: dict[str, Any] | None = None
     opentip: dict[str, Any] | None = None
+    geoip: dict[str, Any] | None = None
+    normalized: dict[str, Any] | None = None
+    consensus: dict[str, Any] | None = None
 
 
 @dataclass

@@ -143,6 +143,18 @@ def build_html_report(
         "  items.forEach(function(item){ item.open = open; });"
         "}"
     )
+    parts.append(
+        "function openScreenshot(el){"
+        "  var src = el.getAttribute('data-src');"
+        "  if (!src) return;"
+        "  var w = window.open('', '_blank');"
+        "  if (!w) return;"
+        "  w.document.write('<html><head><title>Screenshot</title></head><body style=\"margin:0;background:#111;display:flex;align-items:center;justify-content:center;\">');"
+        "  w.document.write('<img src=\"'+src+'\" style=\"max-width:100%;max-height:100vh;\"/>');"
+        "  w.document.write('</body></html>');"
+        "  w.document.close();"
+        "}"
+    )
     parts.append("</script>")
     parts.append("</head>")
     parts.append("<body>")
@@ -240,11 +252,11 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
         show_original = any(item.get("original_url") for item in urls)
         if show_original:
             parts.append(
-                "<table><tr><th>URL</th><th>Original</th><th>VT</th><th>URLScan</th><th>OpenTIP</th></tr>"
+                "<table><tr><th>URL</th><th>Original</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
             )
         else:
             parts.append(
-                "<table><tr><th>URL</th><th>VT</th><th>URLScan</th><th>OpenTIP</th></tr>"
+                "<table><tr><th>URL</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
             )
         for item in urls:
             url_value = str(item.get("url"))
@@ -261,6 +273,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 _urlscan_link(item.get("urlscan")),
             )
             opentip_summary = _format_opentip_summary(item.get("opentip"))
+            screenshot_html = _format_screenshot(item.get("screenshot"))
             original_value = _format_rewrite(item, defang_urls)
             row_cells = [
                 f"<td>{_cell_value(html.escape(url_value), url_value)}</td>",
@@ -274,6 +287,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                     f"<td>{_cell_value(_format_table_value(vt_summary), vt_summary)}</td>",
                     f"<td>{_cell_value(_format_table_value(urlscan_summary), urlscan_summary)}</td>",
                     f"<td>{_cell_value(_format_table_value(opentip_summary), opentip_summary)}</td>",
+                    f"<td>{_cell_value(screenshot_html, None)}</td>",
                 ]
             )
             parts.append("<tr>" + "".join(row_cells) + "</tr>")
@@ -284,16 +298,20 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
         parts.append("<div class=\"section\"><h3>IPs</h3>")
         if any(item.get("opentip") for item in ips):
             parts.append(_opentip_zone_legend())
-        parts.append("<table><tr><th>IP</th><th>AbuseIPDB</th><th>OpenTIP</th></tr>")
+        parts.append("<table><tr><th>IP</th><th>AbuseIPDB</th><th>OpenTIP</th><th>GeoIP/ASN</th><th>Consensus</th></tr>")
         for item in ips:
             ip_value = str(item.get("ip"))
             abuse_summary = _format_abuse_summary(item.get("abuseipdb"))
             opentip_summary = _format_opentip_summary(item.get("opentip"))
+            geoip_summary = _format_geoip_summary(item.get("geoip"))
+            consensus_summary = _format_consensus(item.get("consensus"))
             parts.append(
                 "<tr>"
                 f"<td>{_cell_value(html.escape(ip_value), ip_value)}</td>"
                 f"<td>{_cell_value(_format_table_value(abuse_summary), abuse_summary)}</td>"
                 f"<td>{_cell_value(_format_table_value(opentip_summary), opentip_summary)}</td>"
+                f"<td>{_cell_value(_format_table_value(geoip_summary), geoip_summary)}</td>"
+                f"<td>{_cell_value(_format_table_value(consensus_summary), consensus_summary)}</td>"
                 "</tr>"
             )
         parts.append("</table></div>")
@@ -1027,7 +1045,7 @@ def _format_opentip_summary(opentip: dict[str, Any] | None) -> str:
         if threat and threat not in parts:
             parts.append(str(threat))
         if parts:
-            return ", ".join(parts)
+            return _colorize_opentip_zone(zone_text, ", ".join(parts))
         if data:
             return "ok"
     if isinstance(data, list):
@@ -1035,6 +1053,59 @@ def _format_opentip_summary(opentip: dict[str, Any] | None) -> str:
     if data:
         return str(data)
     return "ok"
+
+
+def _format_geoip_summary(geoip: dict[str, Any] | None) -> str:
+    if not geoip or geoip.get("status") != "ok":
+        return "none"
+    data = geoip.get("data") or {}
+    parts = []
+    city = data.get("city")
+    region = data.get("region")
+    country = data.get("country")
+    org = data.get("org")
+    if city:
+        parts.append(city)
+    if region:
+        parts.append(region)
+    if country:
+        parts.append(country)
+    if org:
+        parts.append(org)
+    if parts:
+        return ", ".join(parts)
+    return "ok"
+
+
+def _format_consensus(consensus: dict[str, Any] | None) -> str:
+    if not consensus:
+        return "none"
+    verdict = consensus.get("verdict", "unknown")
+    top = consensus.get("top_source") or {}
+    source_name = top.get("source") or "n/a"
+    source_verdict = top.get("verdict") or "unknown"
+    return f"{verdict} (top: {source_name}={source_verdict})"
+
+
+def _format_screenshot(screenshot: dict[str, Any] | None) -> str:
+    if not screenshot:
+        return "none"
+    status = screenshot.get("status")
+    if status != "ok":
+        return "<span class=\"status-neutral\">screenshot failed</span>"
+    data = screenshot.get("data")
+    if not data:
+        return "ok"
+    mime = screenshot.get("mime") or "image/png"
+    src = f"data:{mime};base64,{data}"
+    title = "Click for full view"
+    return (
+        "<div>"
+        f"<a class=\"icon-link\" data-src=\"{html.escape(src)}\" onclick=\"openScreenshot(this)\" title=\"{title}\" style=\"cursor:pointer;\">"
+        f"<img src=\"{src}\" alt=\"screenshot\" style=\"max-width:160px;border-radius:8px;display:block;\" />"
+        "</a>"
+        "</div>"
+    )
 
 
 def _format_rewrite(item: dict[str, Any], defang_urls: bool) -> str:
@@ -1064,6 +1135,21 @@ def _normalize_zone(zone: str) -> str:
 
 def _defang(url: str) -> str:
     return url.replace("http://", "hxxp://").replace("https://", "hxxps://").replace(".", "[.]")
+
+
+def _colorize_opentip_zone(zone_text: str, label: str) -> str:
+    key = zone_text.lower()
+    if "red" in key:
+        return f"<span class=\"status-malicious\">{label}</span>"
+    if "orange" in key:
+        return f"<span class=\"status-suspicious\">{label}</span>"
+    if "yellow" in key:
+        return f"<span class=\"status-neutral\">{label}</span>"
+    if "green" in key:
+        return f"<span class=\"status-pass\">{label}</span>"
+    if "grey" in key or "gray" in key:
+        return f"<span class=\"status-neutral\">{label}</span>"
+    return label
 
 
 def _opentip_zone_legend() -> str:

@@ -608,6 +608,9 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "visible_url": item.visible_url,
                 "href_url": item.href_url,
                 "mismatch": item.mismatch,
+                "normalized": item.normalized,
+                "consensus": item.consensus,
+                "screenshot": item.screenshot,
             }
             for item in analysis.urls
         ],
@@ -616,6 +619,8 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "domain": item.domain,
                 "mxtoolbox": item.mxtoolbox,
                 "opentip": item.opentip,
+                "normalized": item.normalized,
+                "consensus": item.consensus,
             }
             for item in analysis.domains
         ],
@@ -625,6 +630,9 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "source": item.source,
                 "abuseipdb": item.abuseipdb,
                 "opentip": item.opentip,
+                "geoip": item.geoip,
+                "normalized": item.normalized,
+                "consensus": item.consensus,
             }
             for item in analysis.ips
         ],
@@ -642,6 +650,8 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "office_info": item.office_info,
                 "pdf_info": item.pdf_info,
                 "header_check": item.header_check,
+                "normalized": item.normalized,
+                "consensus": item.consensus,
                 "is_eml": item.is_eml,
                 "saved_path": item.saved_path,
                 "nested_eml": _analysis_to_dict(item.nested_eml)

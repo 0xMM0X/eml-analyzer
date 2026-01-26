@@ -26,6 +26,10 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - Timing drift and MTA anomaly detection
 - Attachment magic-byte header verification
 - IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
+- IP reputation consensus scoring (multi‑source).
+- GeoIP + ASN enrichment for IPs.
+
+
 
 ## Setup
 
@@ -152,6 +156,9 @@ Report defaults:
 - `IOC_CACHE_DB`: SQLite cache path for IOC de-duplication across runs
 - `IOC_CACHE_TTL_HOURS`: Cache TTL in hours (optional)
 - `REPORT_DEFANG_URLS`: Defang URLs in HTML reports by default (true/false)
+- `IPINFO_API_KEY`: ipinfo.io token for GeoIP/ASN enrichment (optional)
+- `URL_SCREENSHOT_ENABLED`: Enable URL landing page screenshots (true/false)
+- `URL_SCREENSHOT_TIMEOUT_MS`: Screenshot timeout in ms (default: 20000)
 
 Custom theme file example:
 
@@ -207,15 +214,11 @@ Risk level mapping:
 - Add automated PDF structure heuristics (JS, launch actions, embedded files)
 - Auto-cluster similar emails by subject similarity and sender domain.
 - Thread timeline view (visual hop graph for Received chain).
-- GeoIP + ASN enrichment for IPs.
 - Attachment password-protection detection (zip/pdf).
 - Click‑tracking redirect chain expansion.
-- URL landing page screenshot via headless browser (optional).
 - QR code extraction from images/PDFs.
 - Reply-to vs From mismatch scoring + display.
-- Threat intel normalization across vendors (schema + verdict mapping).
 - Embedded HTML form extraction + analysis.
-- IP reputation consensus scoring (multi‑source).
 - Risk score explanation as a JSON‑driven policy file.
 - Attachment entropy scoring (packed/encrypted heuristic).
 

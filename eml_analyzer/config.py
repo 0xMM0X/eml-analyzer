@@ -22,6 +22,9 @@ class AnalyzerConfig:
     ioc_cache_db: str | None = None
     ioc_cache_ttl_hours: int | None = None
     report_defang_urls: bool = False
+    ipinfo_api_key: str | None = None
+    url_screenshot_enabled: bool = False
+    url_screenshot_timeout_ms: int = 20000
     score_auth_fail: int = 2
     score_vt_url_malicious: int = 5
     score_vt_url_suspicious: int = 3
@@ -64,6 +67,12 @@ class AnalyzerConfig:
             ioc_cache_ttl_hours=_parse_optional_int(os.getenv("IOC_CACHE_TTL_HOURS")),
             report_defang_urls=os.getenv("REPORT_DEFANG_URLS", "false").lower()
             in {"1", "true", "yes"},
+            ipinfo_api_key=os.getenv("IPINFO_API_KEY"),
+            url_screenshot_enabled=os.getenv("URL_SCREENSHOT_ENABLED", "false").lower()
+            in {"1", "true", "yes"},
+            url_screenshot_timeout_ms=_parse_int(
+                os.getenv("URL_SCREENSHOT_TIMEOUT_MS"), 20000
+            ),
             score_auth_fail=_parse_int(os.getenv("SCORE_AUTH_FAIL"), 2),
             score_vt_url_malicious=_parse_int(os.getenv("SCORE_VT_URL_MALICIOUS"), 5),
             score_vt_url_suspicious=_parse_int(os.getenv("SCORE_VT_URL_SUSPICIOUS"), 3),

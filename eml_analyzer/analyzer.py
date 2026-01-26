@@ -9,6 +9,8 @@ from typing import Any
 from .abuseipdb_client import AbuseIpdbClient
 from .cache import IocCache
 from .config import AnalyzerConfig
+from .ipinfo_client import IpInfoClient
+from .url_screenshot import UrlScreenshotter
 from .hybrid_analysis_client import HybridAnalysisClient
 from .eml_parser import EmlParser
 from .log_utils import log
@@ -57,14 +59,24 @@ class EmlAnalyzer:
             if config.opentip_api_key
             else None
         )
+        self._ipinfo_client = IpInfoClient(api_key=config.ipinfo_api_key)
         self._cache = None
         if config.ioc_cache_db:
             ttl_seconds = None
             if config.ioc_cache_ttl_hours:
                 ttl_seconds = config.ioc_cache_ttl_hours * 3600
             self._cache = IocCache(config.ioc_cache_db, ttl_seconds=ttl_seconds)
+        self._screenshotter = None
+        if config.url_screenshot_enabled:
+            self._screenshotter = UrlScreenshotter(
+                timeout_ms=config.url_screenshot_timeout_ms
+            )
 
-    def analyze_path(self, path: str, extract_dir: str | None = None) -> AnalysisReport:
+    def analyze_path(
+        self,
+        path: str,
+        extract_dir: str | None = None,
+    ) -> AnalysisReport:
         log(self._verbose, f"Reading EML from {path}")
         with open(path, "rb") as handle:
             data = handle.read()
@@ -81,6 +93,9 @@ class EmlAnalyzer:
         if self._abuse_client:
             log(self._verbose, "Enriching IPs via AbuseIPDB")
             self._enrich_ips_recursive(root)
+        if self._ipinfo_client:
+            log(self._verbose, "Enriching IPs via GeoIP/ASN")
+            self._enrich_geoip_recursive(root)
         if self._urlscan_client:
             log(self._verbose, "Submitting URLs to urlscan.io")
             self._enrich_urlscan_recursive(root)
@@ -93,6 +108,10 @@ class EmlAnalyzer:
         if self._opentip_client:
             log(self._verbose, "Enriching items via Kaspersky OpenTIP")
             self._enrich_opentip_recursive(root)
+        if self._screenshotter:
+            log(self._verbose, "Capturing URL screenshots")
+            self._capture_url_screenshots_recursive(root)
+        self._normalize_iocs_recursive(root)
         statistics = self._build_statistics(root)
         return AnalysisReport(root=root, statistics=statistics)
 
@@ -137,6 +156,23 @@ class EmlAnalyzer:
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):
                 self._enrich_message_ips_recursive(nested, seen)
+
+    def _enrich_geoip_recursive(self, analysis: MessageAnalysis) -> None:
+        seen: dict[str, dict[str, Any]] = {}
+        self._enrich_message_geoip_recursive(analysis, seen)
+
+    def _enrich_message_geoip_recursive(
+        self, analysis: MessageAnalysis, seen: dict[str, dict[str, Any]]
+    ) -> None:
+        for ip in analysis.ips:
+            if ip.ip not in seen:
+                log(self._verbose, f"GeoIP lookup for IP {ip.ip}")
+                seen[ip.ip] = self._cached_lookup("geoip_ip", ip.ip, self._ipinfo_client.lookup)
+            ip.geoip = seen[ip.ip]
+        for attachment in analysis.attachments:
+            nested = attachment.nested_eml
+            if isinstance(nested, MessageAnalysis):
+                self._enrich_message_geoip_recursive(nested, seen)
 
     def _enrich_urlscan_recursive(self, analysis: MessageAnalysis) -> None:
         seen: dict[str, dict[str, Any]] = {}
@@ -278,6 +314,43 @@ class EmlAnalyzer:
             "risk_level": risk_level,
             "risk_breakdown": risk_breakdown,
         }
+
+    def _normalize_iocs_recursive(self, analysis: MessageAnalysis) -> None:
+        self._normalize_message_iocs(analysis)
+        for attachment in analysis.attachments:
+            nested = attachment.nested_eml
+            if isinstance(nested, MessageAnalysis):
+                self._normalize_iocs_recursive(nested)
+
+    def _normalize_message_iocs(self, analysis: MessageAnalysis) -> None:
+        for url in analysis.urls:
+            normalized = _normalize_url_ioc(url)
+            url.normalized = normalized.get("sources")
+            url.consensus = normalized.get("consensus")
+        for ip in analysis.ips:
+            normalized = _normalize_ip_ioc(ip)
+            ip.normalized = normalized.get("sources")
+            ip.consensus = normalized.get("consensus")
+        for domain in analysis.domains:
+            normalized = _normalize_domain_ioc(domain)
+            domain.normalized = normalized.get("sources")
+            domain.consensus = normalized.get("consensus")
+        for attachment in analysis.attachments:
+            normalized = _normalize_attachment_ioc(attachment)
+            attachment.normalized = normalized.get("sources")
+            attachment.consensus = normalized.get("consensus")
+
+    def _capture_url_screenshots_recursive(self, analysis: MessageAnalysis) -> None:
+        for url in analysis.urls:
+            target = url.original_url or url.url
+            if not target:
+                continue
+            result = self._screenshotter.capture(target)
+            url.screenshot = result
+        for attachment in analysis.attachments:
+            nested = attachment.nested_eml
+            if isinstance(nested, MessageAnalysis):
+                self._capture_url_screenshots_recursive(nested)
 
     def _cached_lookup(self, ioc_type: str, value: str, fetcher) -> dict[str, Any]:
         if not self._cache:
@@ -602,3 +675,174 @@ def _risk_level_from_score(score: int) -> str:
     if score > 5:
         return "high"
     return "medium"
+
+
+
+
+def _normalize_url_ioc(url: Any) -> dict[str, Any]:
+    sources = []
+    if url.vt:
+        sources.append(_normalize_vt(url.vt, "virustotal"))
+    if url.urlscan:
+        sources.append(_normalize_urlscan(url.urlscan))
+    if url.opentip:
+        sources.append(_normalize_opentip(url.opentip))
+    consensus = _consensus(sources)
+    return {"sources": sources, "consensus": consensus}
+
+
+def _normalize_ip_ioc(ip: Any) -> dict[str, Any]:
+    sources = []
+    if ip.abuseipdb:
+        sources.append(_normalize_abuse(ip.abuseipdb))
+    if ip.opentip:
+        sources.append(_normalize_opentip(ip.opentip))
+    consensus = _consensus(sources)
+    return {"sources": sources, "consensus": consensus}
+
+
+def _normalize_domain_ioc(domain: Any) -> dict[str, Any]:
+    sources = []
+    if domain.opentip:
+        sources.append(_normalize_opentip(domain.opentip))
+    consensus = _consensus(sources)
+    return {"sources": sources, "consensus": consensus}
+
+
+def _normalize_attachment_ioc(attachment: Any) -> dict[str, Any]:
+    sources = []
+    if attachment.vt:
+        sources.append(_normalize_vt(attachment.vt, "virustotal"))
+    if attachment.hybrid:
+        sources.append(_normalize_hybrid(attachment.hybrid))
+    if attachment.opentip:
+        sources.append(_normalize_opentip(attachment.opentip))
+    consensus = _consensus(sources)
+    return {"sources": sources, "consensus": consensus}
+
+
+def _normalize_vt(vt: dict[str, Any], source: str) -> dict[str, Any]:
+    if not vt or vt.get("status") != "ok":
+        return {"source": source, "verdict": "unknown"}
+    data = vt.get("data") or {}
+    attributes = (data.get("data") or {}).get("attributes") or {}
+    stats = attributes.get("last_analysis_stats") or {}
+    malicious = int(stats.get("malicious", 0) or 0)
+    suspicious = int(stats.get("suspicious", 0) or 0)
+    harmless = int(stats.get("harmless", 0) or 0)
+    if malicious > 0:
+        verdict = "malicious"
+    elif suspicious > 0:
+        verdict = "suspicious"
+    elif harmless > 0:
+        verdict = "clean"
+    else:
+        verdict = "unknown"
+    return {"source": source, "verdict": verdict, "malicious": malicious, "suspicious": suspicious}
+
+
+def _normalize_urlscan(urlscan: dict[str, Any]) -> dict[str, Any]:
+    if not urlscan or urlscan.get("status") != "ok":
+        return {"source": "urlscan", "verdict": "unknown"}
+    data = urlscan.get("data") or {}
+    verdicts = data.get("verdicts", {}) or {}
+    overall = verdicts.get("overall", {}) or {}
+    if overall.get("malicious") is True:
+        return {"source": "urlscan", "verdict": "malicious"}
+    if overall.get("score", 0) >= 50:
+        return {"source": "urlscan", "verdict": "suspicious"}
+    return {"source": "urlscan", "verdict": "clean"}
+
+
+def _normalize_hybrid(hybrid: dict[str, Any]) -> dict[str, Any]:
+    if not hybrid or hybrid.get("status") != "ok":
+        return {"source": "hybrid", "verdict": "unknown"}
+    data = hybrid.get("data")
+    verdicts = []
+    if isinstance(data, list):
+        for item in data:
+            verdict = str(item.get("verdict", "")).lower()
+            if verdict:
+                verdicts.append(verdict)
+    if "malicious" in verdicts:
+        return {"source": "hybrid", "verdict": "malicious"}
+    if "suspicious" in verdicts:
+        return {"source": "hybrid", "verdict": "suspicious"}
+    if verdicts:
+        return {"source": "hybrid", "verdict": "clean"}
+    return {"source": "hybrid", "verdict": "unknown"}
+
+
+def _normalize_opentip(opentip: dict[str, Any]) -> dict[str, Any]:
+    if not opentip or opentip.get("status") != "ok":
+        return {"source": "opentip", "verdict": "unknown"}
+    data = opentip.get("data") or {}
+    zone = str(data.get("Zone") or data.get("zone") or "").lower()
+    mapping = {
+        "red": "malicious",
+        "orange": "suspicious",
+        "yellow": "unknown",
+        "grey": "unknown",
+        "gray": "unknown",
+        "green": "clean",
+    }
+    verdict = mapping.get(zone, "unknown")
+    return {"source": "opentip", "verdict": verdict, "zone": zone}
+
+
+def _normalize_abuse(abuse: dict[str, Any]) -> dict[str, Any]:
+    if not abuse or abuse.get("status") != "ok":
+        return {"source": "abuseipdb", "verdict": "unknown"}
+    data = (abuse.get("data") or {}).get("data", {})
+    confidence = data.get("abuseConfidenceScore")
+    try:
+        score = int(confidence)
+    except (TypeError, ValueError):
+        score = 0
+    if score >= 80:
+        verdict = "malicious"
+    elif score >= 50:
+        verdict = "suspicious"
+    elif score == 0:
+        verdict = "clean"
+    else:
+        verdict = "unknown"
+    return {"source": "abuseipdb", "verdict": verdict, "confidence": score}
+
+
+def _consensus(sources: list[dict[str, Any]]) -> dict[str, Any]:
+    if not sources:
+        return {"verdict": "unknown", "score": 0, "sources": []}
+    scores = {"malicious": 3, "suspicious": 2, "clean": 0, "unknown": 1}
+    total = 0
+    votes = {"malicious": 0, "suspicious": 0, "clean": 0, "unknown": 0}
+    for src in sources:
+        verdict = src.get("verdict", "unknown")
+        votes[verdict] = votes.get(verdict, 0) + 1
+        total += scores.get(verdict, 1)
+    avg = total / max(len(sources), 1)
+    if avg >= 2.5:
+        verdict = "malicious"
+    elif avg >= 1.6:
+        verdict = "suspicious"
+    elif votes.get("clean", 0) == len(sources):
+        verdict = "clean"
+    else:
+        verdict = "unknown"
+    top_source = _top_source(sources)
+    return {"verdict": verdict, "score": round(avg, 2), "votes": votes, "top_source": top_source}
+
+
+def _top_source(sources: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not sources:
+        return None
+    priority = {"malicious": 4, "suspicious": 3, "clean": 2, "unknown": 1}
+    best = None
+    best_score = -1
+    for src in sources:
+        verdict = src.get("verdict", "unknown")
+        score = priority.get(verdict, 0)
+        if score > best_score:
+            best = src
+            best_score = score
+    return best
