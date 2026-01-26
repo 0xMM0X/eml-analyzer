@@ -7,6 +7,7 @@ from dataclasses import asdict
 from typing import Any
 
 from .abuseipdb_client import AbuseIpdbClient
+from .cache import IocCache
 from .config import AnalyzerConfig
 from .hybrid_analysis_client import HybridAnalysisClient
 from .eml_parser import EmlParser
@@ -56,6 +57,12 @@ class EmlAnalyzer:
             if config.opentip_api_key
             else None
         )
+        self._cache = None
+        if config.ioc_cache_db:
+            ttl_seconds = None
+            if config.ioc_cache_ttl_hours:
+                ttl_seconds = config.ioc_cache_ttl_hours * 3600
+            self._cache = IocCache(config.ioc_cache_db, ttl_seconds=ttl_seconds)
 
     def analyze_path(self, path: str, extract_dir: str | None = None) -> AnalysisReport:
         log(self._verbose, f"Reading EML from {path}")
@@ -105,7 +112,7 @@ class EmlAnalyzer:
         for url in analysis.urls:
             if url.url not in seen:
                 log(self._verbose, f"VT lookup for URL {url.url}")
-                seen[url.url] = self._vt_client.get_url_report(url.url)
+                seen[url.url] = self._cached_lookup("vt_url", url.url, self._vt_client.get_url_report)
             url.vt = seen[url.url]
 
         for attachment in analysis.attachments:
@@ -123,7 +130,7 @@ class EmlAnalyzer:
         for ip in analysis.ips:
             if ip.ip not in seen:
                 log(self._verbose, f"AbuseIPDB lookup for IP {ip.ip}")
-                seen[ip.ip] = self._abuse_client.check_ip(ip.ip)
+                seen[ip.ip] = self._cached_lookup("abuse_ip", ip.ip, self._abuse_client.check_ip)
             ip.abuseipdb = seen[ip.ip]
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
@@ -140,7 +147,7 @@ class EmlAnalyzer:
         for url in analysis.urls:
             if url.url not in seen:
                 log(self._verbose, f"urlscan.io submit {url.url}")
-                seen[url.url] = self._urlscan_client.scan_url(url.url)
+                seen[url.url] = self._cached_lookup("urlscan_url", url.url, self._urlscan_client.scan_url)
             url.urlscan = seen[url.url]
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
@@ -161,7 +168,7 @@ class EmlAnalyzer:
         for domain in analysis.domains:
             if domain.domain not in seen:
                 log(self._verbose, f"MxToolbox lookup for domain {domain.domain}")
-                seen[domain.domain] = self._mxtoolbox_client.lookup_domain(domain.domain)
+                seen[domain.domain] = self._cached_lookup("mx_domain", domain.domain, self._mxtoolbox_client.lookup_domain)
             domain.mxtoolbox = seen[domain.domain]
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
@@ -188,20 +195,22 @@ class EmlAnalyzer:
         for url in analysis.urls:
             if url.url not in seen_urls:
                 log(self._verbose, f"OpenTIP lookup URL {url.url}")
-                seen_urls[url.url] = self._opentip_client.lookup_url(url.url)
+                seen_urls[url.url] = self._cached_lookup("opentip_url", url.url, self._opentip_client.lookup_url)
             url.opentip = seen_urls[url.url]
 
         for ip in analysis.ips:
             if ip.ip not in seen_ips:
                 log(self._verbose, f"OpenTIP lookup IP {ip.ip}")
-                seen_ips[ip.ip] = self._opentip_client.lookup_ip(ip.ip)
+                seen_ips[ip.ip] = self._cached_lookup("opentip_ip", ip.ip, self._opentip_client.lookup_ip)
             ip.opentip = seen_ips[ip.ip]
 
         for domain in analysis.domains:
             if domain.domain not in seen_domains:
                 log(self._verbose, f"OpenTIP lookup domain {domain.domain}")
-                seen_domains[domain.domain] = self._opentip_client.lookup_domain(
-                    domain.domain
+                seen_domains[domain.domain] = self._cached_lookup(
+                    "opentip_domain",
+                    domain.domain,
+                    self._opentip_client.lookup_domain,
                 )
             domain.opentip = seen_domains[domain.domain]
 
@@ -210,7 +219,11 @@ class EmlAnalyzer:
             if hash_value:
                 if hash_value not in seen_hashes:
                     log(self._verbose, f"OpenTIP lookup hash {hash_value}")
-                    seen_hashes[hash_value] = self._opentip_client.lookup_hash(hash_value)
+                    seen_hashes[hash_value] = self._cached_lookup(
+                        "opentip_hash",
+                        hash_value,
+                        self._opentip_client.lookup_hash,
+                    )
                 attachment.opentip = seen_hashes[hash_value]
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):
@@ -226,8 +239,10 @@ class EmlAnalyzer:
                 continue
             if attachment.sha256 not in seen:
                 log(self._verbose, f"Hybrid Analysis lookup {attachment.sha256.strip()}")
-                seen[attachment.sha256] = self._hybrid_client.lookup_hash(
-                    attachment.sha256.strip()
+                seen[attachment.sha256] = self._cached_lookup(
+                    "hybrid_hash",
+                    attachment.sha256.strip(),
+                    self._hybrid_client.lookup_hash,
                 )
             attachment.hybrid = seen[attachment.sha256]
         for attachment in analysis.attachments:
@@ -260,6 +275,16 @@ class EmlAnalyzer:
             "risk_level": risk_level,
             "risk_breakdown": risk_breakdown,
         }
+
+    def _cached_lookup(self, ioc_type: str, value: str, fetcher) -> dict[str, Any]:
+        if not self._cache:
+            return fetcher(value)
+        cached = self._cache.get(ioc_type, value)
+        if cached is not None:
+            return cached
+        result = fetcher(value)
+        self._cache.set(ioc_type, value, result)
+        return result
 
 
 def _message_to_dict(message: MessageAnalysis) -> dict[str, Any]:

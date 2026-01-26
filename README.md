@@ -143,6 +143,8 @@ Report defaults:
 - `SCORE_*`: Risk scoring weights (see `.env.example` for full list)
 - `TOOLS_AUTO_DOWNLOAD`: Auto-download external tools if missing (true/false)
 - `REPORT_THEME_FILE`: Path to a JSON palette file for HTML reports
+- `IOC_CACHE_DB`: SQLite cache path for IOC de-duplication across runs
+- `IOC_CACHE_TTL_HOURS`: Cache TTL in hours (optional)
 
 Custom theme file example:
 
@@ -195,7 +197,6 @@ Risk level mapping:
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
 - Add automated PDF structure heuristics (JS, launch actions, embedded files)
-- IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
 - Auto-cluster similar emails by subject similarity and sender domain.
 - Safe link rewrite detection (proofpoint/securelink).
 - Thread timeline view (visual hop graph for Received chain).
