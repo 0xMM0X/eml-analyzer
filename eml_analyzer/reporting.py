@@ -10,7 +10,10 @@ from typing import Any
 
 
 def build_html_report(
-    report: dict[str, Any], theme: str = "light", show_score_details: bool = False
+    report: dict[str, Any],
+    theme: str = "light",
+    show_score_details: bool = False,
+    theme_overrides: dict[str, str] | None = None,
 ) -> str:
     root = report.get("root", {})
     stats = report.get("statistics", {})
@@ -22,25 +25,22 @@ def build_html_report(
     parts.append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />")
     parts.append("<title>EML Analysis Report</title>")
     parts.append("<style>")
-    if theme == "dark":
-        parts.append(
-            "body{font-family:'Times New Roman',serif;background:radial-gradient(circle at 12% 0%,#223036,#141b20 62%,#10151a);color:#e6edf2;margin:0;padding:24px;}"
-        )
-    else:
-        parts.append(
-            "body{font-family:'Times New Roman',serif;background:radial-gradient(circle at top,#f4f0ea,#ebe4d7 60%,#ddd1be);color:#1b1a18;margin:0;padding:24px;}"
-        )
+    palette = _theme_palette(theme, theme_overrides)
+    parts.append(
+        "body{font-family:'Times New Roman',serif;"
+        f"background:{palette['body_bg']};"
+        f"color:{palette['body_fg']};margin:0;padding:24px;}"
+    )
     parts.append(
         ".container{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;}"
     )
-    if theme == "dark":
-        parts.append(
-            ".card{background:linear-gradient(180deg,#1d252c,#141b21);border:1px solid #2a3a42;border-radius:16px;padding:18px;box-shadow:0 16px 36px rgba(0,0,0,0.55);}"
-        )
-    else:
-        parts.append(
-            ".card{background:#ffffff;border:1px solid #d6c8b3;border-radius:16px;padding:18px;box-shadow:0 12px 28px rgba(52,36,18,0.12);}"
-        )
+    parts.append(
+        ".card{"
+        f"background:{palette['card_bg']};"
+        f"border:1px solid {palette['card_border']};"
+        "border-radius:16px;padding:18px;"
+        f"box-shadow:{palette['card_shadow']};}"
+    )
     parts.append(
         ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}"
     )
@@ -54,50 +54,39 @@ def build_html_report(
     parts.append(
         "th,td{border-bottom:1px solid #efe7db;padding:8px 10px;text-align:left;vertical-align:top;font-size:0.95rem;}"
     )
-    if theme == "dark":
-        parts.append("th{background:#2a3a42;font-weight:bold;color:#e6edf2;}")
-        parts.append("tr:nth-child(even) td{background:#182027;}")
-        parts.append("tr:hover td{background:#22303a;}")
-    else:
-        parts.append("th{background:#efe5d5;font-weight:bold;color:#2a241d;}")
-        parts.append("tr:nth-child(even) td{background:#fbf8f2;}")
-        parts.append("tr:hover td{background:#f3eadc;}")
-    if theme == "dark":
-        parts.append(".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#2a3a42;font-weight:bold;color:#e6edf2;}")
-        parts.append(".small{color:#aebcc6;font-size:0.9em;}")
-    else:
-        parts.append(".pill{display:inline-block;padding:4px 10px;border-radius:999px;background:#efe3d1;font-weight:bold;color:#2a241d;}")
-        parts.append(".small{color:#5b4e3d;font-size:0.9em;}")
+    parts.append(f"th{{background:{palette['table_th_bg']};font-weight:bold;color:{palette['table_th_fg']};}}")
+    parts.append(f"tr:nth-child(even) td{{background:{palette['table_even_bg']};}}")
+    parts.append(f"tr:hover td{{background:{palette['table_hover_bg']};}}")
+    parts.append(
+        ".pill{display:inline-block;padding:4px 10px;border-radius:999px;"
+        f"background:{palette['pill_bg']};font-weight:bold;color:{palette['pill_fg']};}"
+    )
+    parts.append(f".small{{color:{palette['small_fg']};font-size:0.9em;}}")
     parts.append(".summary-tile{display:flex;flex-direction:column;gap:6px;}")
-    if theme == "dark":
-        parts.append(".summary-tile.highlight{border:1px solid #3b5661;}")
-    else:
-        parts.append(".summary-tile.highlight{border:1px solid #b8a48a;}")
+    parts.append(f".summary-tile.highlight{{border:1px solid {palette['highlight_border']};}}")
     parts.append(".summary-value{font-size:1.4rem;font-weight:bold;}")
     parts.append(".summary-label{letter-spacing:0.02em;text-transform:uppercase;font-size:0.72rem;}")
     parts.append(".section{margin-top:12px;}")
-    if theme == "dark":
-        parts.append(".section + .section{border-top:1px solid rgba(230,237,242,0.12);padding-top:12px;}")
-    else:
-        parts.append(".section + .section{border-top:1px solid rgba(0,0,0,0.08);padding-top:12px;}")
-    if theme == "dark":
-        parts.append(".note{margin-top:8px;padding:6px 10px;border-radius:10px;background:#1d252c;border:1px solid #2a3a42;color:#e6edf2;font-size:0.85rem;}")
-    else:
-        parts.append(".note{margin-top:8px;padding:6px 10px;border-radius:10px;background:#f6efe4;border:1px solid #e4d7c4;color:#5b4e3d;font-size:0.85rem;}")
+    parts.append(f".section + .section{{border-top:1px solid {palette['section_border']};padding-top:12px;}}")
+    parts.append(
+        ".note{margin-top:8px;padding:6px 10px;border-radius:10px;"
+        f"background:{palette['note_bg']};border:1px solid {palette['note_border']};"
+        f"color:{palette['note_fg']};font-size:0.85rem;}"
+    )
     parts.append(".card-stack{display:flex;flex-direction:column;gap:12px;}")
     parts.append(
         ".tag{display:inline-block;background:#1b1a18;color:#fff;border-radius:6px;padding:2px 8px;font-size:0.8rem;}"
     )
-    if theme == "dark":
-        parts.append(".icon-link{margin-left:6px;text-decoration:none;color:#7fb2c4;font-size:0.9rem;display:inline-block;}")
-        parts.append(".icon-link:hover{color:#9ad1e0;}")
-        parts.append(".copy-btn{margin-left:6px;border:none;background:transparent;cursor:pointer;color:#7fb2c4;font-size:0.9rem;opacity:0;transition:opacity 0.15s ease;}")
-        parts.append(".copy-btn:hover{color:#9ad1e0;}")
-    else:
-        parts.append(".icon-link{margin-left:6px;text-decoration:none;color:#6c5b47;font-size:0.9rem;display:inline-block;}")
-        parts.append(".icon-link:hover{color:#1b1a18;}")
-        parts.append(".copy-btn{margin-left:6px;border:none;background:transparent;cursor:pointer;color:#6c5b47;font-size:0.9rem;opacity:0;transition:opacity 0.15s ease;}")
-        parts.append(".copy-btn:hover{color:#1b1a18;}")
+    parts.append(
+        ".icon-link{margin-left:6px;text-decoration:none;"
+        f"color:{palette['icon_color']};font-size:0.9rem;display:inline-block;}"
+    )
+    parts.append(f".icon-link:hover{{color:{palette['icon_hover']};}}")
+    parts.append(
+        ".copy-btn{margin-left:6px;border:none;background:transparent;cursor:pointer;"
+        f"color:{palette['icon_color']};font-size:0.9rem;opacity:0;transition:opacity 0.15s ease;}"
+    )
+    parts.append(f".copy-btn:hover{{color:{palette['icon_hover']};}}")
     parts.append("td:hover .copy-btn{opacity:1;}")
     parts.append(".tool-actions{display:flex;gap:8px;margin:8px 0;}")
     parts.append(".tool-actions button{border:none;border-radius:999px;padding:4px 10px;cursor:pointer;font-size:0.8rem;font-weight:bold;}")
@@ -114,16 +103,11 @@ def build_html_report(
     parts.append(".status-suspicious{color:#cc7a00;font-weight:bold;}")
     parts.append(".status-neutral{color:#6b5b4a;font-weight:bold;}")
     parts.append(".badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:0.8rem;font-weight:bold;}")
-    if theme == "dark":
-        parts.append(".badge-ok{background:#22323a;color:#e6edf2;}")
-        parts.append(".badge-warn{background:#3a2d26;color:#e6edf2;}")
-    else:
-        parts.append(".badge-ok{background:#e4f2ea;color:#1b5e3c;}")
-        parts.append(".badge-warn{background:#fff1d6;color:#8a5a1f;}")
+    parts.append(f".badge-ok{{background:{palette['badge_ok_bg']};color:{palette['badge_ok_fg']};}}")
+    parts.append(f".badge-warn{{background:{palette['badge_warn_bg']};color:{palette['badge_warn_fg']};}}")
     parts.append(".pill-group{display:inline-flex;flex-wrap:wrap;gap:6px;}")
     parts.append(".mini-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.06);}")
-    if theme == "dark":
-        parts.append(".mini-pill{background:rgba(127,178,196,0.18);}")
+    parts.append(f".mini-pill{{background:{palette['mini_pill_bg']};}}")
     parts.append(".received-list{list-style:none;margin:0;padding:0;}")
     parts.append(
         ".received-item{background:#f9f4eb;border:1px solid #e6dccd;border-radius:10px;padding:8px 10px;margin-bottom:8px;}"
@@ -1063,6 +1047,67 @@ def _opentip_zone_legend() -> str:
         "</div>"
     )
     return legend
+
+
+def _theme_palette(theme: str, overrides: dict[str, str] | None) -> dict[str, str]:
+    if theme == "dark":
+        palette = {
+            "body_bg": "radial-gradient(circle at 12% 0%,#223036,#141b20 62%,#10151a)",
+            "body_fg": "#e6edf2",
+            "card_bg": "linear-gradient(180deg,#1d252c,#141b21)",
+            "card_border": "#2a3a42",
+            "card_shadow": "0 16px 36px rgba(0,0,0,0.55)",
+            "table_th_bg": "#2a3a42",
+            "table_th_fg": "#e6edf2",
+            "table_even_bg": "#182027",
+            "table_hover_bg": "#22303a",
+            "pill_bg": "#2a3a42",
+            "pill_fg": "#e6edf2",
+            "small_fg": "#aebcc6",
+            "highlight_border": "#3b5661",
+            "section_border": "rgba(230,237,242,0.12)",
+            "note_bg": "#1d252c",
+            "note_border": "#2a3a42",
+            "note_fg": "#e6edf2",
+            "icon_color": "#7fb2c4",
+            "icon_hover": "#9ad1e0",
+            "badge_ok_bg": "#22323a",
+            "badge_ok_fg": "#e6edf2",
+            "badge_warn_bg": "#3a2d26",
+            "badge_warn_fg": "#e6edf2",
+            "mini_pill_bg": "rgba(127,178,196,0.18)",
+        }
+    else:
+        palette = {
+            "body_bg": "radial-gradient(circle at top,#f4f0ea,#ebe4d7 60%,#ddd1be)",
+            "body_fg": "#1b1a18",
+            "card_bg": "#ffffff",
+            "card_border": "#d6c8b3",
+            "card_shadow": "0 12px 28px rgba(52,36,18,0.12)",
+            "table_th_bg": "#efe5d5",
+            "table_th_fg": "#2a241d",
+            "table_even_bg": "#fbf8f2",
+            "table_hover_bg": "#f3eadc",
+            "pill_bg": "#efe3d1",
+            "pill_fg": "#2a241d",
+            "small_fg": "#5b4e3d",
+            "highlight_border": "#b8a48a",
+            "section_border": "rgba(0,0,0,0.08)",
+            "note_bg": "#f6efe4",
+            "note_border": "#e4d7c4",
+            "note_fg": "#5b4e3d",
+            "icon_color": "#6c5b47",
+            "icon_hover": "#1b1a18",
+            "badge_ok_bg": "#e4f2ea",
+            "badge_ok_fg": "#1b5e3c",
+            "badge_warn_bg": "#fff1d6",
+            "badge_warn_fg": "#8a5a1f",
+            "mini_pill_bg": "rgba(0,0,0,0.06)",
+        }
+    if overrides:
+        for key, value in overrides.items():
+            palette[key] = value
+    return palette
 
 
 def _format_mxtoolbox_summary(mx: dict[str, Any] | None) -> str:

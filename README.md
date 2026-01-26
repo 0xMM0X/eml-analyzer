@@ -142,6 +142,39 @@ Report defaults:
 - `REPORT_SCORE_DETAILS`: Include score breakdown by default (true/false)
 - `SCORE_*`: Risk scoring weights (see `.env.example` for full list)
 - `TOOLS_AUTO_DOWNLOAD`: Auto-download external tools if missing (true/false)
+- `REPORT_THEME_FILE`: Path to a JSON palette file for HTML reports
+
+Custom theme file example:
+
+```json
+{
+  "dark": {
+    "body_bg": "radial-gradient(circle at 12% 0%,#222833,#141920 62%,#0f141a)",
+    "body_fg": "#e6edf2",
+    "card_bg": "linear-gradient(180deg,#1b222b,#141a21)",
+    "card_border": "#2a3340",
+    "table_th_bg": "#2a3340",
+    "table_th_fg": "#e6edf2",
+    "table_even_bg": "#171e26",
+    "table_hover_bg": "#222a36",
+    "pill_bg": "#2a3340",
+    "pill_fg": "#e6edf2",
+    "small_fg": "#aeb7c4",
+    "highlight_border": "#3a4a5a",
+    "section_border": "rgba(230,237,242,0.12)",
+    "note_bg": "#1b222b",
+    "note_border": "#2a3340",
+    "note_fg": "#e6edf2",
+    "icon_color": "#7fb2c4",
+    "icon_hover": "#9ad1e0",
+    "badge_ok_bg": "#22303a",
+    "badge_ok_fg": "#e6edf2",
+    "badge_warn_bg": "#3a2d26",
+    "badge_warn_fg": "#e6edf2",
+    "mini_pill_bg": "rgba(127,178,196,0.18)"
+  }
+}
+```
 
 ## Output
 The report is JSON containing root message analysis, nested EML details, URL findings, attachment hashes, optional VirusTotal results, and `risk_score`/`risk_level` fields in `statistics`.
@@ -162,6 +195,23 @@ Risk level mapping:
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
 - Add automated PDF structure heuristics (JS, launch actions, embedded files)
+- IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
+- Auto-cluster similar emails by subject similarity and sender domain.
+- Safe link rewrite detection (proofpoint/securelink).
+- Thread timeline view (visual hop graph for Received chain).
+- GeoIP + ASN enrichment for IPs.
+- Attachment password-protection detection (zip/pdf).
+- Click‑tracking redirect chain expansion.
+- URL landing page screenshot via headless browser (optional).
+- QR code extraction from images/PDFs.
+- Reply-to vs From mismatch scoring + display.
+- Threat intel normalization across vendors (schema + verdict mapping).
+- Embedded HTML form extraction + analysis.
+- URL defanging toggle in reports.
+- IP reputation consensus scoring (multi‑source).
+- Risk score explanation as a JSON‑driven policy file.
+- Attachment entropy scoring (packed/encrypted heuristic).
+- Compare visible links vs href mismatch.
 
 
 ### Please feel free to provide any recommendations or contribute enhancements to the tool as you see fit.

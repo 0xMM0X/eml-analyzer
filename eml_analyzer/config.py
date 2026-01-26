@@ -18,6 +18,7 @@ class AnalyzerConfig:
     opentip_api_key: str | None = None
     report_dark: bool = False
     report_score_details: bool = False
+    report_theme_file: str | None = None
     score_auth_fail: int = 2
     score_vt_url_malicious: int = 5
     score_vt_url_suspicious: int = 3
@@ -55,6 +56,7 @@ class AnalyzerConfig:
             report_dark=os.getenv("REPORT_DARK", "false").lower() in {"1", "true", "yes"},
             report_score_details=os.getenv("REPORT_SCORE_DETAILS", "false").lower()
             in {"1", "true", "yes"},
+            report_theme_file=os.getenv("REPORT_THEME_FILE"),
             score_auth_fail=_parse_int(os.getenv("SCORE_AUTH_FAIL"), 2),
             score_vt_url_malicious=_parse_int(os.getenv("SCORE_VT_URL_MALICIOUS"), 5),
             score_vt_url_suspicious=_parse_int(os.getenv("SCORE_VT_URL_SUSPICIOUS"), 3),

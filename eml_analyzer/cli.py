@@ -140,7 +140,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.html:
             theme = "dark" if (args.dark or config.report_dark) else "light"
             score_details = args.score_details or config.report_score_details
-            html_report = build_html_report(output, theme=theme, show_score_details=score_details)
+            theme_overrides = _load_theme_overrides(config.report_theme_file, theme)
+            html_report = build_html_report(
+                output,
+                theme=theme,
+                show_score_details=score_details,
+                theme_overrides=theme_overrides,
+            )
             html_path = _resolve_output_path(eml_path, args.html, ".html", output_dir)
             with open(html_path, "w", encoding="utf-8") as handle:
                 handle.write(html_report)
@@ -240,6 +246,26 @@ def _resolve_output_dir(dir_value: str | None, json_value: object, html_value: o
     import os
 
     return os.path.join(dir_value, "output")
+
+
+def _load_theme_overrides(path: str | None, theme: str) -> dict[str, str] | None:
+    if not path:
+        return None
+    import json
+    import os
+
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    if theme in data and isinstance(data[theme], dict):
+        return {str(k): str(v) for k, v in data[theme].items()}
+    return {str(k): str(v) for k, v in data.items()}
 
 
 def _resolve_correlation_path(output_dir: str, extension: str) -> str:
