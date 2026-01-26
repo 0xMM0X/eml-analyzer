@@ -108,8 +108,18 @@ def build_html_report(
         ".received-item{background:#f9f4eb;border:1px solid #e6dccd;border-radius:10px;padding:8px 10px;margin-bottom:8px;}"
     )
     parts.append(
-        ".received-table td{font-size:0.9rem;line-height:1.4;}"
+        ".received-table td{font-size:0.9rem;line-height:1.4;word-break:break-word;}"
     )
+    parts.append(".timeline{display:flex;flex-direction:column;gap:12px;margin-top:10px;}")
+    parts.append(".timeline-item{display:grid;grid-template-columns:16px 1fr;gap:12px;}")
+    parts.append(".timeline-dot{width:10px;height:10px;border-radius:50%;background:#6c5b47;margin-top:6px;}")
+    parts.append(".timeline-line{width:2px;background:rgba(0,0,0,0.15);margin:0 auto;height:100%;}")
+    if theme == "dark":
+        parts.append(".timeline-dot{background:#7fb2c4;}")
+        parts.append(".timeline-line{background:rgba(230,237,242,0.18);}")
+    parts.append(".timeline-card{border-radius:10px;padding:10px;border:1px solid rgba(0,0,0,0.08);word-break:break-word;}")
+    if theme == "dark":
+        parts.append(".timeline-card{border:1px solid rgba(230,237,242,0.12);}")
     parts.append(".mime-tree{list-style:none;margin:0;padding-left:14px;border-left:2px solid rgba(0,0,0,0.08);}")
     if theme == "dark":
         parts.append(".mime-tree{border-left:2px solid rgba(255,255,255,0.08);}")
@@ -240,8 +250,13 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
         parts.append("</div>")
 
     if received:
+        timeline_html, timeline_redundant = _received_timeline(received)
         parts.append("<div class=\"section\"><h3>Received Chain</h3>")
-        parts.append(_received_table(received))
+        if not timeline_redundant:
+            parts.append(_received_table(received))
+        parts.append("<div class=\"section\"><h4>Timeline</h4>")
+        parts.append(timeline_html)
+        parts.append("</div>")
         parts.append("</div>")
 
     urls = message.get("urls", [])
@@ -627,6 +642,106 @@ def _received_table(received_chain: list[str]) -> str:
         )
     rows.append("</table>")
     return "\n".join(rows)
+
+
+def _received_timeline(received_chain: list[str]) -> tuple[str, bool]:
+    items = []
+    redundant = True
+    for idx, entry in enumerate(received_chain):
+        timestamp = ""
+        ts_dt = None
+        if ";" in entry:
+            timestamp = entry.split(";")[-1].strip()
+            try:
+                ts_dt = parsedate_to_datetime(timestamp)
+            except Exception:
+                ts_dt = None
+        from_host = _extract_received_field(entry, "from")
+        by_host = _extract_received_field(entry, "by")
+        with_field = _extract_received_field(entry, "with")
+        via_field = _extract_received_field(entry, "via")
+        id_field = _extract_received_field(entry, "id")
+        for_field = _extract_received_field(entry, "for")
+
+        main_parts = []
+        if from_host:
+            main_parts.append(f"from {from_host}")
+        if by_host:
+            main_parts.append(f"by {by_host}")
+        main_label = " ".join(main_parts)
+
+        meta_parts = []
+        if with_field:
+            meta_parts.append(f"with {with_field}")
+        if via_field:
+            meta_parts.append(f"via {via_field}")
+        if id_field:
+            meta_parts.append(f"id {id_field}")
+        if for_field:
+            meta_parts.append(f"for {for_field}")
+        meta_label = " · ".join(meta_parts)
+
+        snippet = " ".join(entry.split())
+        snippet = snippet.split(";", 1)[0].strip()
+
+        label = main_label or snippet or "Received header"
+        if main_label or meta_label:
+            redundant = False
+        elif label != snippet:
+            redundant = False
+        items.append(
+            {
+                "timestamp": timestamp,
+                "label": label,
+                "meta": meta_label,
+                "raw": entry,
+                "ts": ts_dt,
+                "idx": idx,
+            }
+        )
+    items.sort(
+        key=lambda item: (
+            item["ts"] or datetime.min.replace(tzinfo=timezone.utc),
+            item["idx"],
+        )
+    )
+    parts = ["<div class=\"timeline\">"]
+    for idx, item in enumerate(items):
+        parts.append("<div class=\"timeline-item\">")
+        parts.append("<div>")
+        parts.append("<div class=\"timeline-dot\"></div>")
+        if idx < len(items) - 1:
+            parts.append("<div class=\"timeline-line\"></div>")
+        parts.append("</div>")
+        parts.append("<div class=\"timeline-card\">")
+        ts_dt = item.get("ts")
+        if ts_dt:
+            if ts_dt.tzinfo is None:
+                ts_dt = ts_dt.replace(tzinfo=timezone.utc)
+            ts_dt = ts_dt.astimezone(timezone.utc)
+            timestamp_value = ts_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+        else:
+            timestamp_value = item.get("timestamp") or ""
+        if timestamp_value:
+            parts.append(f"<div class=\"small\">{html.escape(timestamp_value)}</div>")
+        parts.append(f"<div>{html.escape(item['label'])}</div>")
+        if item.get("meta"):
+            parts.append(f"<div class=\"small\">{html.escape(item['meta'])}</div>")
+        parts.append("</div>")
+        parts.append("</div>")
+    parts.append("</div>")
+    return "\n".join(parts), redundant
+
+
+def _extract_received_field(entry: str, key: str) -> str:
+    pattern = re.compile(
+        rf"\\b{key}\\s+(.+?)(?=\\s+(?:from|by|with|via|id|for)\\b|;|$)",
+        re.IGNORECASE,
+    )
+    match = pattern.search(entry)
+    if not match:
+        return ""
+    return " ".join(match.group(1).strip().split())
 
 
 def _parse_received(value: str) -> dict[str, Any]:
