@@ -26,21 +26,19 @@ def build_html_report(
     parts.append("<title>EML Analysis Report</title>")
     parts.append("<style>")
     palette = _theme_palette(theme, theme_overrides)
-    parts.append(
-        "body{font-family:'Times New Roman',serif;"
-        f"background:{palette['body_bg']};"
-        f"color:{palette['body_fg']};margin:0;padding:24px;}"
-    )
+    parts.append("body{font-family:'Times New Roman',serif;")
+    parts.append(f"background:{palette['body_bg']};")
+    parts.append(f"color:{palette['body_fg']};margin:0;padding:24px;")
+    parts.append("}")
     parts.append(
         ".container{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;}"
     )
-    parts.append(
-        ".card{"
-        f"background:{palette['card_bg']};"
-        f"border:1px solid {palette['card_border']};"
-        "border-radius:16px;padding:18px;"
-        f"box-shadow:{palette['card_shadow']};}"
-    )
+    parts.append(".card{")
+    parts.append(f"background:{palette['card_bg']};")
+    parts.append(f"border:1px solid {palette['card_border']};")
+    parts.append("border-radius:16px;padding:18px;")
+    parts.append(f"box-shadow:{palette['card_shadow']};")
+    parts.append("}")
     parts.append(
         ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}"
     )
@@ -57,10 +55,9 @@ def build_html_report(
     parts.append(f"th{{background:{palette['table_th_bg']};font-weight:bold;color:{palette['table_th_fg']};}}")
     parts.append(f"tr:nth-child(even) td{{background:{palette['table_even_bg']};}}")
     parts.append(f"tr:hover td{{background:{palette['table_hover_bg']};}}")
-    parts.append(
-        ".pill{display:inline-block;padding:4px 10px;border-radius:999px;"
-        f"background:{palette['pill_bg']};font-weight:bold;color:{palette['pill_fg']};}"
-    )
+    parts.append(".pill{display:inline-block;padding:4px 10px;border-radius:999px;")
+    parts.append(f"background:{palette['pill_bg']};font-weight:bold;color:{palette['pill_fg']};")
+    parts.append("}")
     parts.append(f".small{{color:{palette['small_fg']};font-size:0.9em;}}")
     parts.append(".summary-tile{display:flex;flex-direction:column;gap:6px;}")
     parts.append(f".summary-tile.highlight{{border:1px solid {palette['highlight_border']};}}")
@@ -68,24 +65,21 @@ def build_html_report(
     parts.append(".summary-label{letter-spacing:0.02em;text-transform:uppercase;font-size:0.72rem;}")
     parts.append(".section{margin-top:12px;}")
     parts.append(f".section + .section{{border-top:1px solid {palette['section_border']};padding-top:12px;}}")
-    parts.append(
-        ".note{margin-top:8px;padding:6px 10px;border-radius:10px;"
-        f"background:{palette['note_bg']};border:1px solid {palette['note_border']};"
-        f"color:{palette['note_fg']};font-size:0.85rem;}"
-    )
+    parts.append(".note{margin-top:8px;padding:6px 10px;border-radius:10px;")
+    parts.append(f"background:{palette['note_bg']};border:1px solid {palette['note_border']};")
+    parts.append(f"color:{palette['note_fg']};font-size:0.85rem;")
+    parts.append("}")
     parts.append(".card-stack{display:flex;flex-direction:column;gap:12px;}")
     parts.append(
         ".tag{display:inline-block;background:#1b1a18;color:#fff;border-radius:6px;padding:2px 8px;font-size:0.8rem;}"
     )
-    parts.append(
-        ".icon-link{margin-left:6px;text-decoration:none;"
-        f"color:{palette['icon_color']};font-size:0.9rem;display:inline-block;}"
-    )
+    parts.append(".icon-link{margin-left:6px;text-decoration:none;")
+    parts.append(f"color:{palette['icon_color']};font-size:0.9rem;display:inline-block;")
+    parts.append("}")
     parts.append(f".icon-link:hover{{color:{palette['icon_hover']};}}")
-    parts.append(
-        ".copy-btn{margin-left:6px;border:none;background:transparent;cursor:pointer;"
-        f"color:{palette['icon_color']};font-size:0.9rem;opacity:0;transition:opacity 0.15s ease;}"
-    )
+    parts.append(".copy-btn{margin-left:6px;border:none;background:transparent;cursor:pointer;")
+    parts.append(f"color:{palette['icon_color']};font-size:0.9rem;opacity:0;transition:opacity 0.15s ease;")
+    parts.append("}")
     parts.append(f".copy-btn:hover{{color:{palette['icon_hover']};}}")
     parts.append("td:hover .copy-btn{opacity:1;}")
     parts.append(".tool-actions{display:flex;gap:8px;margin:8px 0;}")
