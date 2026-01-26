@@ -30,6 +30,11 @@ class UrlInfo:
     vt: dict[str, Any] | None = None
     urlscan: dict[str, Any] | None = None
     opentip: dict[str, Any] | None = None
+    original_url: str | None = None
+    rewrite_provider: str | None = None
+    visible_url: str | None = None
+    href_url: str | None = None
+    mismatch: bool = False
 
 
 @dataclass

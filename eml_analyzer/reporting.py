@@ -14,6 +14,7 @@ def build_html_report(
     theme: str = "light",
     show_score_details: bool = False,
     theme_overrides: dict[str, str] | None = None,
+    defang_urls: bool = False,
 ) -> str:
     root = report.get("root", {})
     stats = report.get("statistics", {})
@@ -169,7 +170,7 @@ def build_html_report(
     parts.append("<div class=\"spacer\"></div>")
     parts.append("<div class=\"card\">")
     parts.append("<h2>Root Message</h2>")
-    parts.append(_render_message(root, 0))
+    parts.append(_render_message(root, 0, defang_urls))
     parts.append("</div>")
 
     parts.append("</div>")
@@ -178,7 +179,7 @@ def build_html_report(
     return "\n".join(parts)
 
 
-def _render_message(message: dict[str, Any], depth: int) -> str:
+def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> str:
     parts: list[str] = []
     meta = {
         "Message-Id": message.get("message_id"),
@@ -236,11 +237,22 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
         parts.append("<div class=\"section\"><h3>URLs</h3>")
         if any(item.get("opentip") for item in urls):
             parts.append(_opentip_zone_legend())
-        parts.append(
-            "<table><tr><th>URL</th><th>VT</th><th>URLScan</th><th>OpenTIP</th></tr>"
-        )
+        show_original = any(item.get("original_url") for item in urls)
+        if show_original:
+            parts.append(
+                "<table><tr><th>URL</th><th>Original</th><th>VT</th><th>URLScan</th><th>OpenTIP</th></tr>"
+            )
+        else:
+            parts.append(
+                "<table><tr><th>URL</th><th>VT</th><th>URLScan</th><th>OpenTIP</th></tr>"
+            )
         for item in urls:
             url_value = str(item.get("url"))
+            if defang_urls:
+                url_value = _defang(url_value)
+            mismatch_flag = item.get("mismatch")
+            if mismatch_flag:
+                url_value = f"{url_value} (mismatch)"
             vt_summary = _format_vt_summary(item.get("vt"))
             vt_summary = _with_icon_link(vt_summary, _vt_url_link(item.get("url")))
             urlscan_summary = _format_urlscan_summary(item.get("urlscan"))
@@ -249,14 +261,22 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
                 _urlscan_link(item.get("urlscan")),
             )
             opentip_summary = _format_opentip_summary(item.get("opentip"))
-            parts.append(
-                "<tr>"
-                f"<td>{_cell_value(html.escape(url_value), url_value)}</td>"
-                f"<td>{_cell_value(_format_table_value(vt_summary), vt_summary)}</td>"
-                f"<td>{_cell_value(_format_table_value(urlscan_summary), urlscan_summary)}</td>"
-                f"<td>{_cell_value(_format_table_value(opentip_summary), opentip_summary)}</td>"
-                "</tr>"
+            original_value = _format_rewrite(item, defang_urls)
+            row_cells = [
+                f"<td>{_cell_value(html.escape(url_value), url_value)}</td>",
+            ]
+            if show_original:
+                row_cells.append(
+                    f"<td>{_cell_value(_format_table_value(original_value), original_value)}</td>"
+                )
+            row_cells.extend(
+                [
+                    f"<td>{_cell_value(_format_table_value(vt_summary), vt_summary)}</td>",
+                    f"<td>{_cell_value(_format_table_value(urlscan_summary), urlscan_summary)}</td>",
+                    f"<td>{_cell_value(_format_table_value(opentip_summary), opentip_summary)}</td>",
+                ]
             )
+            parts.append("<tr>" + "".join(row_cells) + "</tr>")
         parts.append("</table></div>")
 
     ips = message.get("ips", [])
@@ -353,7 +373,7 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
             nested = item.get("nested_eml")
             if isinstance(nested, dict):
                 parts.append("<div class=\"section\"><h3>Nested Message</h3>")
-                parts.append(_render_message(nested, depth + 1))
+                parts.append(_render_message(nested, depth + 1, defang_urls))
                 parts.append("</div>")
             pdf_info = item.get("pdf_info") or {}
             if pdf_info:
@@ -1017,6 +1037,18 @@ def _format_opentip_summary(opentip: dict[str, Any] | None) -> str:
     return "ok"
 
 
+def _format_rewrite(item: dict[str, Any], defang_urls: bool) -> str:
+    original = item.get("original_url")
+    provider = item.get("rewrite_provider")
+    if not original:
+        return "none"
+    if defang_urls:
+        original = _defang(str(original))
+    if provider:
+        return f"{provider}: {original}"
+    return str(original)
+
+
 def _normalize_zone(zone: str) -> str:
     key = zone.strip().lower()
     mapping = {
@@ -1028,6 +1060,10 @@ def _normalize_zone(zone: str) -> str:
         "green": "Green (clean)",
     }
     return mapping.get(key, zone)
+
+
+def _defang(url: str) -> str:
+    return url.replace("http://", "hxxp://").replace("https://", "hxxps://").replace(".", "[.]")
 
 
 def _opentip_zone_legend() -> str:

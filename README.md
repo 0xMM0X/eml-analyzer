@@ -25,6 +25,7 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - Correlation view across multiple EMLs in directory scans (summary report)
 - Timing drift and MTA anomaly detection
 - Attachment magic-byte header verification
+- IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
 
 ## Setup
 
@@ -77,6 +78,11 @@ Write both JSON and HTML reports:
 
 ```bash
 python -m eml_analyzer.cli -f message.eml --json --html
+```
+Defang URLs in the HTML report:
+
+```bash
+python -m eml_analyzer.cli -f message.eml --html --defang-urls
 ```
 Analyze a directory of EML files (writes to `output/` under the directory):
 
@@ -145,6 +151,7 @@ Report defaults:
 - `REPORT_THEME_FILE`: Path to a JSON palette file for HTML reports
 - `IOC_CACHE_DB`: SQLite cache path for IOC de-duplication across runs
 - `IOC_CACHE_TTL_HOURS`: Cache TTL in hours (optional)
+- `REPORT_DEFANG_URLS`: Defang URLs in HTML reports by default (true/false)
 
 Custom theme file example:
 
@@ -196,9 +203,9 @@ Risk level mapping:
 
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
+- Safe link rewrite detection (Proofpoint/securelink/Safe Links)
 - Add automated PDF structure heuristics (JS, launch actions, embedded files)
 - Auto-cluster similar emails by subject similarity and sender domain.
-- Safe link rewrite detection (proofpoint/securelink).
 - Thread timeline view (visual hop graph for Received chain).
 - GeoIP + ASN enrichment for IPs.
 - Attachment password-protection detection (zip/pdf).
@@ -208,11 +215,10 @@ Risk level mapping:
 - Reply-to vs From mismatch scoring + display.
 - Threat intel normalization across vendors (schema + verdict mapping).
 - Embedded HTML form extraction + analysis.
-- URL defanging toggle in reports.
 - IP reputation consensus scoring (multi‑source).
 - Risk score explanation as a JSON‑driven policy file.
 - Attachment entropy scoring (packed/encrypted heuristic).
-- Compare visible links vs href mismatch.
+
 
 
 ### Please feel free to provide any recommendations or contribute enhancements to the tool as you see fit.

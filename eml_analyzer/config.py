@@ -21,6 +21,7 @@ class AnalyzerConfig:
     report_theme_file: str | None = None
     ioc_cache_db: str | None = None
     ioc_cache_ttl_hours: int | None = None
+    report_defang_urls: bool = False
     score_auth_fail: int = 2
     score_vt_url_malicious: int = 5
     score_vt_url_suspicious: int = 3
@@ -61,6 +62,8 @@ class AnalyzerConfig:
             report_theme_file=os.getenv("REPORT_THEME_FILE"),
             ioc_cache_db=os.getenv("IOC_CACHE_DB"),
             ioc_cache_ttl_hours=_parse_optional_int(os.getenv("IOC_CACHE_TTL_HOURS")),
+            report_defang_urls=os.getenv("REPORT_DEFANG_URLS", "false").lower()
+            in {"1", "true", "yes"},
             score_auth_fail=_parse_int(os.getenv("SCORE_AUTH_FAIL"), 2),
             score_vt_url_malicious=_parse_int(os.getenv("SCORE_VT_URL_MALICIOUS"), 5),
             score_vt_url_suspicious=_parse_int(os.getenv("SCORE_VT_URL_SUSPICIOUS"), 3),

@@ -70,6 +70,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Generate a dark mode HTML report.",
     )
     parser.add_argument(
+        "--defang-urls",
+        action="store_true",
+        help="Defang URLs in HTML report output.",
+    )
+    parser.add_argument(
         "--score-details",
         action="store_true",
         help="Include risk score breakdown details in outputs.",
@@ -141,11 +146,13 @@ def main(argv: list[str] | None = None) -> int:
             theme = "dark" if (args.dark or config.report_dark) else "light"
             score_details = args.score_details or config.report_score_details
             theme_overrides = _load_theme_overrides(config.report_theme_file, theme)
+            defang_urls = args.defang_urls or config.report_defang_urls
             html_report = build_html_report(
                 output,
                 theme=theme,
                 show_score_details=score_details,
                 theme_overrides=theme_overrides,
+                defang_urls=defang_urls,
             )
             html_path = _resolve_output_path(eml_path, args.html, ".html", output_dir)
             with open(html_path, "w", encoding="utf-8") as handle:

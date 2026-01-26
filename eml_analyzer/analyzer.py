@@ -110,10 +110,11 @@ class EmlAnalyzer:
         self, analysis: MessageAnalysis, seen: dict[str, dict[str, Any]]
     ) -> None:
         for url in analysis.urls:
-            if url.url not in seen:
-                log(self._verbose, f"VT lookup for URL {url.url}")
-                seen[url.url] = self._cached_lookup("vt_url", url.url, self._vt_client.get_url_report)
-            url.vt = seen[url.url]
+            target = url.original_url or url.url
+            if target not in seen:
+                log(self._verbose, f"VT lookup for URL {target}")
+                seen[target] = self._cached_lookup("vt_url", target, self._vt_client.get_url_report)
+            url.vt = seen[target]
 
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
@@ -145,10 +146,11 @@ class EmlAnalyzer:
         self, analysis: MessageAnalysis, seen: dict[str, dict[str, Any]]
     ) -> None:
         for url in analysis.urls:
-            if url.url not in seen:
-                log(self._verbose, f"urlscan.io submit {url.url}")
-                seen[url.url] = self._cached_lookup("urlscan_url", url.url, self._urlscan_client.scan_url)
-            url.urlscan = seen[url.url]
+            target = url.original_url or url.url
+            if target not in seen:
+                log(self._verbose, f"urlscan.io submit {target}")
+                seen[target] = self._cached_lookup("urlscan_url", target, self._urlscan_client.scan_url)
+            url.urlscan = seen[target]
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):
@@ -193,10 +195,11 @@ class EmlAnalyzer:
         seen_hashes: dict[str, dict[str, Any]],
     ) -> None:
         for url in analysis.urls:
-            if url.url not in seen_urls:
-                log(self._verbose, f"OpenTIP lookup URL {url.url}")
-                seen_urls[url.url] = self._cached_lookup("opentip_url", url.url, self._opentip_client.lookup_url)
-            url.opentip = seen_urls[url.url]
+            target = url.original_url or url.url
+            if target not in seen_urls:
+                log(self._verbose, f"OpenTIP lookup URL {target}")
+                seen_urls[target] = self._cached_lookup("opentip_url", target, self._opentip_client.lookup_url)
+            url.opentip = seen_urls[target]
 
         for ip in analysis.ips:
             if ip.ip not in seen_ips:

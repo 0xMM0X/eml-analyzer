@@ -18,7 +18,7 @@ from .office_utils import analyze_office_attachment
 from .pdf_utils import analyze_pdf_attachment
 from .ip_utils import extract_ips_from_text
 from .models import AttachmentInfo, DomainInfo, HeaderAnalysis, IpInfo, MessageAnalysis, UrlInfo
-from .url_utils import extract_urls_from_html, extract_urls_from_text
+from .url_utils import extract_urls_from_html, extract_urls_from_text, detect_rewritten_url, extract_anchor_pairs
 from .virustotal_client import VirusTotalClient
 
 
@@ -138,12 +138,50 @@ class EmlParser:
         if content_type == "text/html":
             urls = extract_urls_from_html(text)
             source = "html"
+            for href, visible in extract_anchor_pairs(text):
+                if not _is_http_like(visible):
+                    continue
+                mismatch = _normalize_url(visible) != _normalize_url(href)
+                rewrite = detect_rewritten_url(href)
+                if rewrite:
+                    analysis.urls.append(
+                        UrlInfo(
+                            url=href,
+                            source=source,
+                            visible_url=visible,
+                            href_url=href,
+                            mismatch=mismatch,
+                            original_url=rewrite.get("original"),
+                            rewrite_provider=rewrite.get("provider"),
+                        )
+                    )
+                else:
+                    analysis.urls.append(
+                        UrlInfo(
+                            url=href,
+                            source=source,
+                            visible_url=visible,
+                            href_url=href,
+                            mismatch=mismatch,
+                        )
+                    )
         else:
             urls = extract_urls_from_text(text)
             source = "text"
 
         for url in urls:
-            analysis.urls.append(UrlInfo(url=url, source=source))
+            rewrite = detect_rewritten_url(url)
+            if rewrite:
+                analysis.urls.append(
+                    UrlInfo(
+                        url=url,
+                        source=source,
+                        original_url=rewrite.get("original"),
+                        rewrite_provider=rewrite.get("provider"),
+                    )
+                )
+            else:
+                analysis.urls.append(UrlInfo(url=url, source=source))
 
     def _extract_ips_from_part(self, part: Message, analysis: MessageAnalysis) -> None:
         try:
@@ -400,6 +438,15 @@ class EmlParser:
         return timing, anomalies, details
 
 
+def _is_http_like(value: str) -> bool:
+    value = value.strip().lower()
+    return value.startswith("http://") or value.startswith("https://")
+
+
+def _normalize_url(value: str) -> str:
+    return value.strip().rstrip("/").lower()
+
+
 
 def _parse_date(value: str | None) -> Any | None:
     if not value:
@@ -556,6 +603,11 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "vt": item.vt,
                 "urlscan": item.urlscan,
                 "opentip": item.opentip,
+                "original_url": item.original_url,
+                "rewrite_provider": item.rewrite_provider,
+                "visible_url": item.visible_url,
+                "href_url": item.href_url,
+                "mismatch": item.mismatch,
             }
             for item in analysis.urls
         ],

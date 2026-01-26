@@ -5,3 +5,4 @@ __pycache__/*
 eml_analyzer/__pycache__/*
 eml/*
 eml_analyzer/tools/*
+*.sqlite
