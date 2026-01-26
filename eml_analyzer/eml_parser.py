@@ -555,6 +555,7 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "source": item.source,
                 "vt": item.vt,
                 "urlscan": item.urlscan,
+                "opentip": item.opentip,
             }
             for item in analysis.urls
         ],
@@ -562,11 +563,17 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
             {
                 "domain": item.domain,
                 "mxtoolbox": item.mxtoolbox,
+                "opentip": item.opentip,
             }
             for item in analysis.domains
         ],
         "ips": [
-            {"ip": item.ip, "source": item.source, "abuseipdb": item.abuseipdb}
+            {
+                "ip": item.ip,
+                "source": item.source,
+                "abuseipdb": item.abuseipdb,
+                "opentip": item.opentip,
+            }
             for item in analysis.ips
         ],
         "attachments": [
@@ -578,6 +585,7 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
                 "sha1": item.sha1,
                 "sha256": item.sha256,
                 "vt": item.vt,
+                "opentip": item.opentip,
                 "hybrid": item.hybrid,
                 "office_info": item.office_info,
                 "pdf_info": item.pdf_info,

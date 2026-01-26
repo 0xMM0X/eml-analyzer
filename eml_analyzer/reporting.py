@@ -256,8 +256,10 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
     urls = message.get("urls", [])
     if urls:
         parts.append("<div class=\"section\"><h3>URLs</h3>")
+        if any(item.get("opentip") for item in urls):
+            parts.append(_opentip_zone_legend())
         parts.append(
-            "<table><tr><th>URL</th><th>VT</th><th>URLScan</th></tr>"
+            "<table><tr><th>URL</th><th>VT</th><th>URLScan</th><th>OpenTIP</th></tr>"
         )
         for item in urls:
             url_value = str(item.get("url"))
@@ -268,11 +270,13 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
                 urlscan_summary,
                 _urlscan_link(item.get("urlscan")),
             )
+            opentip_summary = _format_opentip_summary(item.get("opentip"))
             parts.append(
                 "<tr>"
                 f"<td>{_cell_value(html.escape(url_value), url_value)}</td>"
                 f"<td>{_cell_value(_format_table_value(vt_summary), vt_summary)}</td>"
                 f"<td>{_cell_value(_format_table_value(urlscan_summary), urlscan_summary)}</td>"
+                f"<td>{_cell_value(_format_table_value(opentip_summary), opentip_summary)}</td>"
                 "</tr>"
             )
         parts.append("</table></div>")
@@ -280,14 +284,18 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
     ips = message.get("ips", [])
     if ips:
         parts.append("<div class=\"section\"><h3>IPs</h3>")
-        parts.append("<table><tr><th>IP</th><th>AbuseIPDB</th></tr>")
+        if any(item.get("opentip") for item in ips):
+            parts.append(_opentip_zone_legend())
+        parts.append("<table><tr><th>IP</th><th>AbuseIPDB</th><th>OpenTIP</th></tr>")
         for item in ips:
             ip_value = str(item.get("ip"))
             abuse_summary = _format_abuse_summary(item.get("abuseipdb"))
+            opentip_summary = _format_opentip_summary(item.get("opentip"))
             parts.append(
                 "<tr>"
                 f"<td>{_cell_value(html.escape(ip_value), ip_value)}</td>"
                 f"<td>{_cell_value(_format_table_value(abuse_summary), abuse_summary)}</td>"
+                f"<td>{_cell_value(_format_table_value(opentip_summary), opentip_summary)}</td>"
                 "</tr>"
             )
         parts.append("</table></div>")
@@ -295,18 +303,22 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
     domains = message.get("domains", [])
     if domains:
         parts.append("<div class=\"section\"><h3>Sender Domain</h3>")
+        if any(item.get("opentip") for item in domains):
+            parts.append(_opentip_zone_legend())
         parts.append(
-            "<table><tr><th>Domain</th><th>MxToolbox</th><th>Passed</th><th>Warnings</th><th>Failed</th><th>MX Rep</th><th>DNS Server</th><th>Time (ms)</th></tr>"
+            "<table><tr><th>Domain</th><th>MxToolbox</th><th>OpenTIP</th><th>Passed</th><th>Warnings</th><th>Failed</th><th>MX Rep</th><th>DNS Server</th><th>Time (ms)</th></tr>"
         )
         for item in domains:
             domain_value = str(item.get("domain"))
             mx_summary = _format_mxtoolbox_summary(item.get("mxtoolbox"))
             mx_passed, mx_warnings, mx_failed = _format_mxtoolbox_sets(item.get("mxtoolbox"))
             mx_rep, mx_dns, mx_time = _format_mxtoolbox_meta(item.get("mxtoolbox"))
+            opentip_summary = _format_opentip_summary(item.get("opentip"))
             parts.append(
                 "<tr>"
                 f"<td>{_cell_value(html.escape(domain_value), domain_value)}</td>"
                 f"<td>{_cell_value(_format_table_value(mx_summary), mx_summary)}</td>"
+                f"<td>{_cell_value(_format_table_value(opentip_summary), opentip_summary)}</td>"
                 f"<td>{_cell_value(_format_table_value(mx_passed), mx_passed)}</td>"
                 f"<td>{_cell_value(_format_table_value(mx_warnings), mx_warnings)}</td>"
                 f"<td>{_cell_value(_format_table_value(mx_failed), mx_failed)}</td>"
@@ -341,6 +353,8 @@ def _render_message(message: dict[str, Any], depth: int) -> str:
                     _format_vt_summary(item.get("vt")),
                     _vt_file_link(item.get("sha256")),
                 )
+            if item.get("opentip") is not None:
+                attachment_rows["OpenTIP"] = _format_opentip_summary(item.get("opentip"))
             if item.get("hybrid") is not None:
                 attachment_rows["Hybrid"] = _with_icon_link(
                     _format_hybrid_summary(item.get("hybrid")),
@@ -993,6 +1007,62 @@ def _format_hybrid_summary(hybrid: dict[str, Any] | None) -> str:
             return _pill_group(_colorize_verdicts(sorted(set(verdicts))))
         return f"matches={len(data)}"
     return "ok"
+
+
+def _format_opentip_summary(opentip: dict[str, Any] | None) -> str:
+    if not opentip:
+        return "none"
+    status = opentip.get("status")
+    if status != "ok":
+        return _format_error(opentip)
+    data = opentip.get("data")
+    if isinstance(data, dict):
+        parts = []
+        zone = data.get("Zone") or data.get("zone") or data.get("ZoneName")
+        verdict = data.get("Verdict") or data.get("verdict")
+        threat = data.get("Threat") or data.get("threat")
+        if zone:
+            zone_text = _normalize_zone(str(zone))
+            parts.append(zone_text)
+        if verdict and verdict not in parts:
+            parts.append(str(verdict))
+        if threat and threat not in parts:
+            parts.append(str(threat))
+        if parts:
+            return ", ".join(parts)
+        if data:
+            return "ok"
+    if isinstance(data, list):
+        return f"records={len(data)}"
+    if data:
+        return str(data)
+    return "ok"
+
+
+def _normalize_zone(zone: str) -> str:
+    key = zone.strip().lower()
+    mapping = {
+        "red": "Red (malicious)",
+        "orange": "Orange (suspicious)",
+        "yellow": "Yellow (not-a-virus)",
+        "grey": "Grey (no data)",
+        "gray": "Grey (no data)",
+        "green": "Green (clean)",
+    }
+    return mapping.get(key, zone)
+
+
+def _opentip_zone_legend() -> str:
+    legend = (
+        "<div class=\"note\">OpenTIP zones: "
+        "<span class=\"pill\">Green: clean</span> "
+        "<span class=\"pill\">Grey: no data</span> "
+        "<span class=\"pill\">Yellow: not-a-virus</span> "
+        "<span class=\"pill\">Orange: suspicious</span> "
+        "<span class=\"pill\">Red: malicious</span>"
+        "</div>"
+    )
+    return legend
 
 
 def _format_mxtoolbox_summary(mx: dict[str, Any] | None) -> str:

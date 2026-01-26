@@ -13,6 +13,7 @@ from .eml_parser import EmlParser
 from .log_utils import log
 from .mxtoolbox_client import MxToolboxClient
 from .models import AnalysisReport, MessageAnalysis
+from .opentip_client import OpenTipClient
 from .urlscan_client import UrlscanClient
 from .virustotal_client import VirusTotalClient
 
@@ -50,6 +51,11 @@ class EmlAnalyzer:
             if config.mxtoolbox_api_key
             else None
         )
+        self._opentip_client = (
+            OpenTipClient(api_key=config.opentip_api_key)
+            if config.opentip_api_key
+            else None
+        )
 
     def analyze_path(self, path: str, extract_dir: str | None = None) -> AnalysisReport:
         log(self._verbose, f"Reading EML from {path}")
@@ -77,6 +83,9 @@ class EmlAnalyzer:
         if self._mxtoolbox_client:
             log(self._verbose, "Enriching sender domains via MxToolbox")
             self._enrich_domains_recursive(root)
+        if self._opentip_client:
+            log(self._verbose, "Enriching items via Kaspersky OpenTIP")
+            self._enrich_opentip_recursive(root)
         statistics = self._build_statistics(root)
         return AnalysisReport(root=root, statistics=statistics)
 
@@ -158,6 +167,56 @@ class EmlAnalyzer:
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):
                 self._enrich_message_domains_recursive(nested, seen)
+
+    def _enrich_opentip_recursive(self, analysis: MessageAnalysis) -> None:
+        seen_urls: dict[str, dict[str, Any]] = {}
+        seen_ips: dict[str, dict[str, Any]] = {}
+        seen_domains: dict[str, dict[str, Any]] = {}
+        seen_hashes: dict[str, dict[str, Any]] = {}
+        self._enrich_message_opentip_recursive(
+            analysis, seen_urls, seen_ips, seen_domains, seen_hashes
+        )
+
+    def _enrich_message_opentip_recursive(
+        self,
+        analysis: MessageAnalysis,
+        seen_urls: dict[str, dict[str, Any]],
+        seen_ips: dict[str, dict[str, Any]],
+        seen_domains: dict[str, dict[str, Any]],
+        seen_hashes: dict[str, dict[str, Any]],
+    ) -> None:
+        for url in analysis.urls:
+            if url.url not in seen_urls:
+                log(self._verbose, f"OpenTIP lookup URL {url.url}")
+                seen_urls[url.url] = self._opentip_client.lookup_url(url.url)
+            url.opentip = seen_urls[url.url]
+
+        for ip in analysis.ips:
+            if ip.ip not in seen_ips:
+                log(self._verbose, f"OpenTIP lookup IP {ip.ip}")
+                seen_ips[ip.ip] = self._opentip_client.lookup_ip(ip.ip)
+            ip.opentip = seen_ips[ip.ip]
+
+        for domain in analysis.domains:
+            if domain.domain not in seen_domains:
+                log(self._verbose, f"OpenTIP lookup domain {domain.domain}")
+                seen_domains[domain.domain] = self._opentip_client.lookup_domain(
+                    domain.domain
+                )
+            domain.opentip = seen_domains[domain.domain]
+
+        for attachment in analysis.attachments:
+            hash_value = attachment.sha256 or attachment.sha1 or attachment.md5
+            if hash_value:
+                if hash_value not in seen_hashes:
+                    log(self._verbose, f"OpenTIP lookup hash {hash_value}")
+                    seen_hashes[hash_value] = self._opentip_client.lookup_hash(hash_value)
+                attachment.opentip = seen_hashes[hash_value]
+            nested = attachment.nested_eml
+            if isinstance(nested, MessageAnalysis):
+                self._enrich_message_opentip_recursive(
+                    nested, seen_urls, seen_ips, seen_domains, seen_hashes
+                )
 
     def _enrich_message_hybrid_recursive(
         self, analysis: MessageAnalysis, seen: dict[str, dict[str, Any]]

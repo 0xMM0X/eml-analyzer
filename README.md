@@ -11,6 +11,7 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - Computes attachment hashes (MD5/SHA1/SHA256)
 - Queries VirusTotal for hashes and URLs (optional)
 - Queries AbuseIPDB for IP reputation (optional)
+- Queries Kaspersky OpenTIP for hashes, URLs, IPs, and domains (optional)
 - Submits URLs to urlscan.io with private visibility (optional)
 - Recursively analyzes nested EML messages
 - Risk scoring (0-10) with clear (<5), medium (=5), and high (>5) levels
@@ -21,6 +22,7 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - PDF attachment analysis with peepdf (optional) + structure heuristics (JS/Launch/Embedded)
 - MIME structure visualization in the HTML report
 - Directory scans with include/exclude patterns
+- Correlation view across multiple EMLs in directory scans (summary report)
 - Timing drift and MTA anomaly detection
 - Attachment magic-byte header verification
 
@@ -68,6 +70,8 @@ curl -L https://raw.githubusercontent.com/DidierStevens/DidierStevensSuite/maste
 python -m eml_analyzer.cli -f path\to\message.eml --json
 ```
 Defaults to `path\to\message-report.json`. Use `--json custom.json` to override.
+
+If neither `--json` nor `--html` are provided, the CLI now writes both by default.
 
 Write both JSON and HTML reports:
 
@@ -128,6 +132,9 @@ python -m eml_analyzer.cli -f message.eml --allow-url-submission
 - `VT_ALLOW_URL_SUBMISSION`: Allow URL submission (true/false)
 - `ABUSEIPDB_API_KEY`: AbuseIPDB API key
 - `URLSCAN_API_KEY`: urlscan.io API key
+- `HYBRID_API_KEY`: Hybrid Analysis API key
+- `MXTOOLBOX_API_KEY`: MxToolbox API key
+- `OPENTIP_API_KEY`: Kaspersky OpenTIP API token
 
 You can set these once in `.env` (see `.env.example`).
 Report defaults:
@@ -154,7 +161,6 @@ Risk level mapping:
 
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
-- Correlation view across multiple EMLs in directory scans
 - Add automated PDF structure heuristics (JS, launch actions, embedded files)
 
 

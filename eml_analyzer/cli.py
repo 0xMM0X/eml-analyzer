@@ -6,6 +6,7 @@ import sys
 
 from .analyzer import EmlAnalyzer
 from .config import AnalyzerConfig
+from .correlation import build_correlation, build_correlation_html
 from .reporting import build_html_report
 
 
@@ -105,8 +106,13 @@ def main(argv: list[str] | None = None) -> int:
 
         os.makedirs(output_dir, exist_ok=True)
 
+    if not args.json and not args.html:
+        args.json = True
+        args.html = True
+
     total = len(eml_paths)
     start_time = _monotonic()
+    all_reports: list[dict[str, object]] = []
     for index, eml_path in enumerate(eml_paths, start=1):
         if args.dir or total > 1:
             eta = _estimate_eta(start_time, index - 1, total)
@@ -117,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
             extract_dir = args.extract_dir or _default_extract_dir(eml_path)
         report = analyzer.analyze_path(eml_path, extract_dir=extract_dir)
         output = analyzer.report_as_dict(report)
+        all_reports.append(output)
         show_score_details = args.score_details or config.report_score_details
         if not show_score_details:
             output.get("statistics", {}).pop("risk_breakdown", None)
@@ -137,6 +144,17 @@ def main(argv: list[str] | None = None) -> int:
             html_path = _resolve_output_path(eml_path, args.html, ".html", output_dir)
             with open(html_path, "w", encoding="utf-8") as handle:
                 handle.write(html_report)
+
+    if output_dir and total > 1:
+        correlation = build_correlation(all_reports)
+        if args.json:
+            corr_path = _resolve_correlation_path(output_dir, ".json")
+            with open(corr_path, "w", encoding="utf-8") as handle:
+                handle.write(json.dumps(correlation, indent=2))
+        if args.html:
+            corr_path = _resolve_correlation_path(output_dir, ".html")
+            with open(corr_path, "w", encoding="utf-8") as handle:
+                handle.write(build_correlation_html(correlation))
     return 0
 
 
@@ -222,6 +240,12 @@ def _resolve_output_dir(dir_value: str | None, json_value: object, html_value: o
     import os
 
     return os.path.join(dir_value, "output")
+
+
+def _resolve_correlation_path(output_dir: str, extension: str) -> str:
+    import os
+
+    return os.path.join(output_dir, f"correlation-report{extension}")
 
 
 def _monotonic() -> float:

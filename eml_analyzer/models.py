@@ -13,6 +13,7 @@ class AttachmentInfo:
     sha1: str | None = None
     sha256: str | None = None
     vt: dict[str, Any] | None = None
+    opentip: dict[str, Any] | None = None
     hybrid: dict[str, Any] | None = None
     is_eml: bool = False
     nested_eml: Any | None = None
@@ -28,12 +29,14 @@ class UrlInfo:
     source: str
     vt: dict[str, Any] | None = None
     urlscan: dict[str, Any] | None = None
+    opentip: dict[str, Any] | None = None
 
 
 @dataclass
 class DomainInfo:
     domain: str
     mxtoolbox: dict[str, Any] | None = None
+    opentip: dict[str, Any] | None = None
 
 
 @dataclass
@@ -41,6 +44,7 @@ class IpInfo:
     ip: str
     source: str
     abuseipdb: dict[str, Any] | None = None
+    opentip: dict[str, Any] | None = None
 
 
 @dataclass
