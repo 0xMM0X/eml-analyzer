@@ -28,6 +28,7 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
 - IP reputation consensus scoring (multi‑source).
 - GeoIP + ASN enrichment for IPs.
+- URL landing page screenshot via headless browser (optional).
 
 
 
@@ -37,6 +38,12 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
+```
+
+Full install (all optional integrations):
+
+```bash
+pip install -r requirements.full.txt
 ```
 
 Optional (full VBA macro bodies):
