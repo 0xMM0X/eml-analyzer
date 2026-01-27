@@ -1,6 +1,7 @@
 """URL extraction helpers."""
 
 import re
+from typing import Any
 from urllib.parse import urlparse, parse_qs, unquote
 from html.parser import HTMLParser
 
@@ -59,6 +60,90 @@ def extract_anchor_pairs(html: str) -> list[tuple[str, str]]:
     for href, text in parser.anchor_texts:
         pairs.append((href, text))
     return pairs
+
+
+class _FormParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.forms: list[dict[str, Any]] = []
+        self._current: dict[str, Any] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        tag_lower = tag.lower()
+        attrs_dict = {name.lower(): (value or "") for name, value in attrs}
+        if tag_lower == "form":
+            self._current = {
+                "action": attrs_dict.get("action", ""),
+                "method": (attrs_dict.get("method") or "get").lower(),
+                "inputs": [],
+            }
+            return
+        if self._current is None:
+            return
+        if tag_lower == "input":
+            entry = {
+                "name": attrs_dict.get("name", ""),
+                "type": (attrs_dict.get("type") or "text").lower(),
+                "value": attrs_dict.get("value", ""),
+                "placeholder": attrs_dict.get("placeholder", ""),
+                "required": "required" in attrs_dict,
+                "autocomplete": attrs_dict.get("autocomplete", ""),
+            }
+            self._current["inputs"].append(entry)
+        elif tag_lower == "textarea":
+            entry = {
+                "name": attrs_dict.get("name", ""),
+                "type": "textarea",
+                "placeholder": attrs_dict.get("placeholder", ""),
+                "required": "required" in attrs_dict,
+                "autocomplete": attrs_dict.get("autocomplete", ""),
+            }
+            self._current["inputs"].append(entry)
+        elif tag_lower == "select":
+            entry = {
+                "name": attrs_dict.get("name", ""),
+                "type": "select",
+                "required": "required" in attrs_dict,
+            }
+            self._current["inputs"].append(entry)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "form":
+            return
+        if self._current is not None:
+            self.forms.append(self._current)
+        self._current = None
+
+
+def extract_forms_from_html(html: str) -> list[dict[str, Any]]:
+    parser = _FormParser()
+    parser.feed(html)
+    results: list[dict[str, Any]] = []
+    for form in parser.forms:
+        inputs = form.get("inputs") or []
+        input_types = [item.get("type") or "text" for item in inputs]
+        type_counts: dict[str, int] = {}
+        for item_type in input_types:
+            type_counts[item_type] = type_counts.get(item_type, 0) + 1
+        has_password = any(item_type == "password" for item_type in input_types)
+        has_file = any(item_type == "file" for item_type in input_types)
+        hidden_count = sum(1 for item_type in input_types if item_type == "hidden")
+        action = form.get("action") or ""
+        external_action = _is_http_url(action)
+        results.append(
+            {
+                "action": action,
+                "method": form.get("method") or "get",
+                "inputs": inputs,
+                "input_types": type_counts,
+                "input_count": len(inputs),
+                "has_password": has_password,
+                "has_file": has_file,
+                "hidden_count": hidden_count,
+                "external_action": external_action,
+            }
+        )
+    return results
 
 
 def maybe_defang(url: str, enabled: bool) -> str:

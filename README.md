@@ -28,6 +28,8 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - Thread timeline view for Received chain (visual hop graph)
 - Attachment password-protection detection (ZIP/PDF)
 - Attachment entropy scoring (packed/encrypted heuristic)
+- QR code extraction from images/PDFs (optional)
+- Embedded HTML form extraction + analysis
 - IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
 - IP reputation consensus scoring (multi‑source).
 - GeoIP + ASN enrichment for IPs.
@@ -71,6 +73,12 @@ Optional (pdfid from pip):
 
 ```bash
 pip install pdfid
+```
+
+Optional (QR extraction dependencies):
+
+```bash
+pip install pillow pyzbar pymupdf
 ```
 
 Optional (pdf-parser.py from DidierStevensSuite) OR just set the tool installing flag to true:
@@ -224,9 +232,7 @@ Risk level mapping:
 - Add automated PDF structure heuristics (JS, launch actions, embedded files)
 - Auto-cluster similar emails by subject similarity and sender domain.
 - Click‑tracking redirect chain expansion.
-- QR code extraction from images/PDFs.
 - Reply-to vs From mismatch scoring + display.
-- Embedded HTML form extraction + analysis.
 - Risk score explanation as a JSON‑driven policy file.
 
 

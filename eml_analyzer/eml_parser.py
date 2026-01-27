@@ -16,9 +16,16 @@ from .hashing import hash_bytes
 from .log_utils import log
 from .office_utils import analyze_office_attachment
 from .pdf_utils import analyze_pdf_attachment
+from .qr_utils import extract_qr_codes
 from .ip_utils import extract_ips_from_text
 from .models import AttachmentInfo, DomainInfo, HeaderAnalysis, IpInfo, MessageAnalysis, UrlInfo
-from .url_utils import extract_urls_from_html, extract_urls_from_text, detect_rewritten_url, extract_anchor_pairs
+from .url_utils import (
+    extract_urls_from_html,
+    extract_urls_from_text,
+    detect_rewritten_url,
+    extract_anchor_pairs,
+    extract_forms_from_html,
+)
 from .virustotal_client import VirusTotalClient
 
 
@@ -107,6 +114,9 @@ class EmlParser:
         attachment.pdf_info = analyze_pdf_attachment(filename, payload)
         if attachment.pdf_info:
             log(self._verbose, f"PDF analysis: {attachment.pdf_info}")
+        attachment.qr_info = extract_qr_codes(filename, content_type, payload)
+        if attachment.qr_info:
+            log(self._verbose, f"QR analysis: {attachment.qr_info}")
         attachment.password_protected = _detect_password_protection(filename, payload)
         attachment.entropy = _compute_entropy(payload)
 
@@ -140,6 +150,9 @@ class EmlParser:
         if content_type == "text/html":
             urls = extract_urls_from_html(text)
             source = "html"
+            forms = extract_forms_from_html(text)
+            if forms:
+                analysis.forms.extend(forms)
             for href, visible in extract_anchor_pairs(text):
                 if not _is_http_like(visible):
                     continue

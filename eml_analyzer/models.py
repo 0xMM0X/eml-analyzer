@@ -20,6 +20,7 @@ class AttachmentInfo:
     saved_path: str | None = None
     office_info: dict[str, Any] | None = None
     pdf_info: dict[str, Any] | None = None
+    qr_info: dict[str, Any] | None = None
     header_check: dict[str, Any] | None = None
     normalized: dict[str, Any] | None = None
     consensus: dict[str, Any] | None = None
@@ -84,6 +85,7 @@ class MessageAnalysis:
     date: str | None
     headers: HeaderAnalysis
     urls: list[UrlInfo] = field(default_factory=list)
+    forms: list[dict[str, Any]] = field(default_factory=list)
     ips: list[IpInfo] = field(default_factory=list)
     domains: list[DomainInfo] = field(default_factory=list)
     mime_tree: dict[str, Any] | None = None

@@ -308,6 +308,36 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
             parts.append("<tr>" + "".join(row_cells) + "</tr>")
         parts.append("</table></div>")
 
+    forms = message.get("forms", [])
+    if forms:
+        parts.append("<div class=\"section\"><h3>Embedded HTML Forms</h3>")
+        parts.append(
+            "<table><tr><th>Action</th><th>Method</th><th>Inputs</th><th>Password</th><th>File</th><th>Hidden</th><th>External</th><th>Details</th></tr>"
+        )
+        for form in forms:
+            action = form.get("action") or ""
+            action_display = _defang(action) if defang_urls else action
+            method = str(form.get("method") or "get").upper()
+            inputs_summary = _format_form_inputs_summary(form)
+            has_password = "yes" if form.get("has_password") else "no"
+            has_file = "yes" if form.get("has_file") else "no"
+            hidden = str(form.get("hidden_count") or 0)
+            external = "yes" if form.get("external_action") else "no"
+            details = _format_form_details(form)
+            parts.append(
+                "<tr>"
+                f"<td>{_cell_value(html.escape(action_display), action_display)}</td>"
+                f"<td>{_cell_value(html.escape(method), method)}</td>"
+                f"<td>{_cell_value(html.escape(inputs_summary), inputs_summary)}</td>"
+                f"<td>{_cell_value(html.escape(has_password), has_password)}</td>"
+                f"<td>{_cell_value(html.escape(has_file), has_file)}</td>"
+                f"<td>{_cell_value(html.escape(hidden), hidden)}</td>"
+                f"<td>{_cell_value(html.escape(external), external)}</td>"
+                f"<td>{details}</td>"
+                "</tr>"
+            )
+        parts.append("</table></div>")
+
     ips = message.get("ips", [])
     if ips:
         parts.append("<div class=\"section\"><h3>IPs</h3>")
@@ -400,6 +430,9 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 attachment_rows["PDF Heuristics"] = _format_pdf_heuristics(
                     item.get("pdf_info")
                 )
+            qr_summary = _format_qr_summary(item.get("qr_info"))
+            if qr_summary:
+                attachment_rows["QR Codes"] = qr_summary
             if item.get("password_protected"):
                 attachment_rows["Password Protected"] = _format_password_protection(
                     item.get("password_protected")
@@ -512,6 +545,27 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                         if pdf_parser.get("truncated"):
                             parts.append("<div class=\"note\">pdf-parser output truncated.</div>")
                         parts.append("</details>")
+                parts.append("</div>")
+            qr_info = item.get("qr_info") or {}
+            qr_codes = qr_info.get("codes") or []
+            qr_error = qr_info.get("error")
+            if qr_codes or qr_error:
+                tool_name = html.escape(str(qr_info.get("tool") or "qr"))
+                status = html.escape(str(qr_info.get("status") or "unknown"))
+                parts.append("<div class=\"section tool-section\"><h3>QR Codes</h3>")
+                parts.append("<details open>")
+                parts.append(f"<summary>{tool_name} ({status})</summary>")
+                if qr_error:
+                    parts.append(f"<div class=\"note\">{html.escape(str(qr_error))}</div>")
+                if qr_codes:
+                    for idx_code, code in enumerate(qr_codes, start=1):
+                        code_type = html.escape(str(code.get("type") or "QR"))
+                        code_data = html.escape(str(code.get("data") or ""))
+                        parts.append("<details>")
+                        parts.append(f"<summary>Code {idx_code}: {code_type}</summary>")
+                        parts.append(f"<pre class=\"code-block\">{code_data}</pre>")
+                        parts.append("</details>")
+                parts.append("</details>")
                 parts.append("</div>")
             office_info = item.get("office_info") or {}
             tool_results = office_info.get("tool_results") or []
@@ -1245,6 +1299,58 @@ def _format_entropy(info: dict[str, Any] | None) -> str:
     value = info.get("value")
     classification = info.get("classification", "unknown")
     return f"{value} ({classification})"
+
+
+def _format_qr_summary(qr_info: dict[str, Any] | None) -> str:
+    if not qr_info:
+        return ""
+    codes = qr_info.get("codes") or []
+    status = qr_info.get("status")
+    if codes:
+        return f"{len(codes)} found"
+    if status and status != "ok":
+        return str(status)
+    return ""
+
+
+def _format_form_inputs_summary(form: dict[str, Any]) -> str:
+    count = form.get("input_count")
+    type_counts = form.get("input_types") or {}
+    if not count and not type_counts:
+        return "none"
+    parts = []
+    for key, value in sorted(type_counts.items()):
+        parts.append(f"{key}={value}")
+    types_text = ", ".join(parts) if parts else "n/a"
+    return f"{count} ({types_text})"
+
+
+def _format_form_details(form: dict[str, Any]) -> str:
+    inputs = form.get("inputs") or []
+    if not inputs:
+        return "none"
+    lines = []
+    for item in inputs:
+        name = item.get("name") or ""
+        input_type = item.get("type") or "text"
+        placeholder = item.get("placeholder") or ""
+        required = " required" if item.get("required") else ""
+        autocomplete = item.get("autocomplete") or ""
+        extras = []
+        if placeholder:
+            extras.append(f"placeholder={placeholder}")
+        if autocomplete:
+            extras.append(f"autocomplete={autocomplete}")
+        extra_text = f" ({', '.join(extras)})" if extras else ""
+        label = f"{name or '[unnamed]'} [{input_type}]{required}{extra_text}"
+        lines.append(label)
+    content = "\n".join(lines)
+    return (
+        "<details>"
+        "<summary>View</summary>"
+        f"<pre class=\"code-block\">{html.escape(content)}</pre>"
+        "</details>"
+    )
 
 
 def _format_rewrite(item: dict[str, Any], defang_urls: bool) -> str:

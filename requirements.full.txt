@@ -4,3 +4,6 @@ olefile>=0.47
 peepdf-3>=0.4.2
 pdfid>=1.0.0
 playwright>=1.41.2
+pillow>=10.2.0
+pyzbar>=0.1.9
+pymupdf>=1.24.0
