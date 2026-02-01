@@ -25,6 +25,7 @@ from .url_utils import (
     detect_rewritten_url,
     extract_anchor_pairs,
     extract_forms_from_html,
+    expand_click_tracking,
 )
 from .virustotal_client import VirusTotalClient
 
@@ -168,6 +169,7 @@ class EmlParser:
                             mismatch=mismatch,
                             original_url=rewrite.get("original"),
                             rewrite_provider=rewrite.get("provider"),
+                            redirect_chain={"click": expand_click_tracking(href)},
                         )
                     )
                 else:
@@ -178,6 +180,7 @@ class EmlParser:
                             visible_url=visible,
                             href_url=href,
                             mismatch=mismatch,
+                            redirect_chain={"click": expand_click_tracking(href)},
                         )
                     )
         else:
@@ -193,10 +196,17 @@ class EmlParser:
                         source=source,
                         original_url=rewrite.get("original"),
                         rewrite_provider=rewrite.get("provider"),
+                        redirect_chain={"click": expand_click_tracking(url)},
                     )
                 )
             else:
-                analysis.urls.append(UrlInfo(url=url, source=source))
+                analysis.urls.append(
+                    UrlInfo(
+                        url=url,
+                        source=source,
+                        redirect_chain={"click": expand_click_tracking(url)},
+                    )
+                )
 
     def _extract_ips_from_part(self, part: Message, analysis: MessageAnalysis) -> None:
         try:

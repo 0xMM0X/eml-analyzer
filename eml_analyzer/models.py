@@ -40,6 +40,7 @@ class UrlInfo:
     visible_url: str | None = None
     href_url: str | None = None
     mismatch: bool = False
+    redirect_chain: dict[str, Any] | None = None
     normalized: dict[str, Any] | None = None
     consensus: dict[str, Any] | None = None
     screenshot: dict[str, Any] | None = None

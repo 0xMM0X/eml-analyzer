@@ -17,6 +17,7 @@ from .log_utils import log
 from .mxtoolbox_client import MxToolboxClient
 from .models import AnalysisReport, MessageAnalysis
 from .opentip_client import OpenTipClient
+from .redirect_utils import resolve_redirect_chain
 from .urlscan_client import UrlscanClient
 from .virustotal_client import VirusTotalClient
 
@@ -99,6 +100,9 @@ class EmlAnalyzer:
         if self._urlscan_client:
             log(self._verbose, "Submitting URLs to urlscan.io")
             self._enrich_urlscan_recursive(root)
+        if self._config.url_redirect_resolve:
+            log(self._verbose, "Resolving server-side URL redirects")
+            self._resolve_redirects_recursive(root)
         if self._hybrid_client:
             log(self._verbose, "Enriching attachments via Hybrid Analysis")
             self._enrich_hybrid_recursive(root)
@@ -191,6 +195,45 @@ class EmlAnalyzer:
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):
                 self._enrich_message_urlscan_recursive(nested, seen)
+
+    def _resolve_redirects_recursive(self, analysis: MessageAnalysis) -> None:
+        seen: dict[str, dict[str, Any]] = {}
+        self._resolve_message_redirects_recursive(analysis, seen)
+
+    def _resolve_message_redirects_recursive(
+        self, analysis: MessageAnalysis, seen: dict[str, dict[str, Any]]
+    ) -> None:
+        for url in analysis.urls:
+            target = url.original_url or url.url
+            if not target:
+                continue
+            if self._config.url_redirect_only_tracked:
+                chain_info = url.redirect_chain or {}
+                click_info = None
+                if isinstance(chain_info, dict):
+                    click_info = chain_info.get("click")
+                if not (click_info and click_info.get("chain")):
+                    continue
+            if target not in seen:
+                log(self._verbose, f"Resolve redirects for {target}")
+                seen[target] = self._cached_lookup(
+                    "redirect_url",
+                    target,
+                    lambda value: resolve_redirect_chain(
+                        value,
+                        timeout_seconds=self._config.url_redirect_timeout_seconds,
+                        max_hops=self._config.url_redirect_max_hops,
+                    ),
+                )
+            result = seen[target]
+            if url.redirect_chain is None:
+                url.redirect_chain = {}
+            if isinstance(url.redirect_chain, dict):
+                url.redirect_chain["server"] = result
+        for attachment in analysis.attachments:
+            nested = attachment.nested_eml
+            if isinstance(nested, MessageAnalysis):
+                self._resolve_message_redirects_recursive(nested, seen)
 
     def _enrich_hybrid_recursive(self, analysis: MessageAnalysis) -> None:
         seen: dict[str, dict[str, Any]] = {}
@@ -405,6 +448,8 @@ def _calculate_risk_score(
     breakdown: dict[str, Any] = {
         "auth_failures": [],
         "auth_points": 0,
+        "reply_to_mismatch": 0,
+        "reply_to_points": 0,
         "vt_url": {"malicious": 0, "suspicious": 0},
         "vt_url_points": 0,
         "vt_files": {"malicious": 0, "suspicious": 0},
@@ -438,6 +483,11 @@ def _calculate_risk_score(
             score += config.score_auth_fail
             breakdown["auth_failures"].append(key)
             breakdown["auth_points"] += config.score_auth_fail
+
+    if _reply_to_from_mismatch(analysis):
+        breakdown["reply_to_mismatch"] = 1
+        breakdown["reply_to_points"] += config.score_reply_to_mismatch
+        score += config.score_reply_to_mismatch
 
     for url in urls:
         vt_mal, vt_susp = _vt_counts(url.vt)
@@ -555,6 +605,26 @@ def _score_from_vt(
     if suspicious > 0:
         score += suspicious_weight
     return score
+
+
+def _reply_to_from_mismatch(analysis: MessageAnalysis) -> bool:
+    from_addr = analysis.from_addr or ""
+    reply_to = (analysis.headers.summary or {}).get("reply_to") or ""
+    from_domain = _extract_email_domain(from_addr)
+    reply_domain = _extract_email_domain(reply_to)
+    if not from_domain or not reply_domain:
+        return False
+    return from_domain.lower() != reply_domain.lower()
+
+
+def _extract_email_domain(value: str) -> str:
+    if not value:
+        return ""
+    if "<" in value and ">" in value:
+        value = value.split("<", 1)[-1].split(">", 1)[0]
+    if "@" not in value:
+        return ""
+    return value.split("@", 1)[-1].strip()
 
 
 def _score_from_abuse(

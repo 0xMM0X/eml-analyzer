@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 from datetime import datetime, timezone
+import itertools
 from email.utils import parsedate_to_datetime
 import re
 from typing import Any
@@ -143,6 +144,16 @@ def build_html_report(
         parts.append(".code-block{background:#f8f3ea;color:#2a241d;border:1px solid #d6c8b3;border-radius:10px;padding:10px;overflow:auto;white-space:pre-wrap;}")
     parts.append(".raw-block{max-height:180px;overflow:auto;word-break:break-word;}")
     parts.append(".spacer{height:10px;}")
+    parts.append(".hop-map{display:flex;gap:10px;align-items:center;overflow-x:auto;padding:6px 2px;}")
+    parts.append(".hop-node{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:120px;}")
+    parts.append(".hop-btn{border:1px solid rgba(0,0,0,0.15);border-radius:999px;padding:6px 10px;cursor:pointer;background:#f6efe4;font-size:0.85rem;}")
+    parts.append(".hop-btn.active{background:#e6d7c1;border-color:#d1b998;}")
+    parts.append(".hop-line{width:40px;height:2px;background:rgba(0,0,0,0.2);}")
+    if theme == "dark":
+        parts.append(".hop-btn{background:#1e2a3a;border-color:rgba(230,237,242,0.2);color:#eaf1fb;}")
+        parts.append(".hop-btn.active{background:#2b3b52;border-color:#4b6a8c;}")
+        parts.append(".hop-line{background:rgba(230,237,242,0.3);}")
+    parts.append(".hop-details{margin-top:10px;}")
     parts.append("</style>")
     parts.append("<script>")
     parts.append(
@@ -163,6 +174,19 @@ def build_html_report(
         "  w.document.write('<img src=\"'+src+'\" style=\"max-width:100%;max-height:100vh;\"/>');"
         "  w.document.write('</body></html>');"
         "  w.document.close();"
+        "}"
+    )
+    parts.append(
+        "function selectHop(containerId, idx){"
+        "  var container = document.getElementById(containerId);"
+        "  if (!container) return;"
+        "  var buttons = container.querySelectorAll('.hop-btn');"
+        "  buttons.forEach(function(btn){ btn.classList.remove('active'); });"
+        "  var active = container.querySelector('[data-hop=\"' + idx + '\"]');"
+        "  if (active) active.classList.add('active');"
+        "  var detail = container.querySelector('.hop-detail[data-hop=\"' + idx + '\"]');"
+        "  container.querySelectorAll('.hop-detail').forEach(function(item){ item.style.display='none'; });"
+        "  if (detail) detail.style.display = 'block';"
         "}"
     )
     parts.append("</script>")
@@ -218,7 +242,14 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
     received = headers.get("received_chain", [])
 
     parts.append("<div class=\"section\"><h3>Header Summary</h3>")
-    parts.append(_key_value_table(summary))
+    summary_table = summary
+    reply_to_value = summary.get("reply_to") if summary else None
+    from_value = message.get("from_addr")
+    mismatch_text = _format_reply_to_mismatch(from_value, reply_to_value)
+    if mismatch_text:
+        summary_table = dict(summary)
+        summary_table["reply_to_vs_from"] = mismatch_text
+    parts.append(_key_value_table(summary_table))
     parts.append("</div>")
 
     if auth:
@@ -257,6 +288,9 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
         parts.append("<div class=\"section\"><h4>Timeline</h4>")
         parts.append(timeline_html)
         parts.append("</div>")
+        parts.append("<div class=\"section\"><h4>Hop Map</h4>")
+        parts.append(_received_hop_map(received))
+        parts.append("</div>")
         parts.append("</div>")
 
     urls = message.get("urls", [])
@@ -267,11 +301,11 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
         show_original = any(item.get("original_url") for item in urls)
         if show_original:
             parts.append(
-                "<table><tr><th>URL</th><th>Original</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
+                "<table><tr><th>URL</th><th>Original</th><th>Redirects</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
             )
         else:
             parts.append(
-                "<table><tr><th>URL</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
+                "<table><tr><th>URL</th><th>Redirects</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
             )
         for item in urls:
             url_value = str(item.get("url"))
@@ -289,6 +323,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
             )
             opentip_summary = _format_opentip_summary(item.get("opentip"))
             screenshot_html = _format_screenshot(item.get("screenshot"))
+            redirect_html = _format_redirect_chain(item.get("redirect_chain"), defang_urls)
             original_value = _format_rewrite(item, defang_urls)
             row_cells = [
                 f"<td>{_cell_value(html.escape(url_value), url_value)}</td>",
@@ -297,6 +332,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 row_cells.append(
                     f"<td>{_cell_value(_format_table_value(original_value), original_value)}</td>"
                 )
+            row_cells.append(f"<td>{redirect_html}</td>")
             row_cells.extend(
                 [
                     f"<td>{_cell_value(_format_table_value(vt_summary), vt_summary)}</td>",
@@ -312,7 +348,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
     if forms:
         parts.append("<div class=\"section\"><h3>Embedded HTML Forms</h3>")
         parts.append(
-            "<table><tr><th>Action</th><th>Method</th><th>Inputs</th><th>Password</th><th>File</th><th>Hidden</th><th>External</th><th>Details</th></tr>"
+            "<table><tr><th>Action</th><th>Method</th><th>Inputs</th><th>Password</th><th>File</th><th>Hidden</th><th>External</th><th>Heuristics</th><th>Details</th></tr>"
         )
         for form in forms:
             action = form.get("action") or ""
@@ -323,6 +359,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
             has_file = "yes" if form.get("has_file") else "no"
             hidden = str(form.get("hidden_count") or 0)
             external = "yes" if form.get("external_action") else "no"
+            heuristics = _format_form_heuristics(form)
             details = _format_form_details(form)
             parts.append(
                 "<tr>"
@@ -333,6 +370,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 f"<td>{_cell_value(html.escape(has_file), has_file)}</td>"
                 f"<td>{_cell_value(html.escape(hidden), hidden)}</td>"
                 f"<td>{_cell_value(html.escape(external), external)}</td>"
+                f"<td>{_cell_value(html.escape(heuristics), heuristics)}</td>"
                 f"<td>{details}</td>"
                 "</tr>"
             )
@@ -787,6 +825,100 @@ def _received_timeline(received_chain: list[str]) -> tuple[str, bool]:
     return "\n".join(parts), redundant
 
 
+_HOP_MAP_COUNTER = itertools.count(1)
+
+
+def _received_hop_map(received_chain: list[str]) -> str:
+    items = []
+    for idx, entry in enumerate(received_chain):
+        timestamp = ""
+        ts_dt = None
+        if ";" in entry:
+            timestamp = entry.split(";")[-1].strip()
+            try:
+                ts_dt = parsedate_to_datetime(timestamp)
+            except Exception:
+                ts_dt = None
+        if ts_dt:
+            if ts_dt.tzinfo is None:
+                ts_dt = ts_dt.replace(tzinfo=timezone.utc)
+            ts_dt = ts_dt.astimezone(timezone.utc)
+            timestamp = ts_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+        from_host = _extract_received_field(entry, "from")
+        by_host = _extract_received_field(entry, "by")
+        with_field = _extract_received_field(entry, "with")
+        via_field = _extract_received_field(entry, "via")
+        id_field = _extract_received_field(entry, "id")
+        for_field = _extract_received_field(entry, "for")
+        label = by_host or from_host or f"Hop {idx + 1}"
+        items.append(
+            {
+                "idx": idx,
+                "label": label,
+                "from": from_host,
+                "by": by_host,
+                "with": with_field,
+                "via": via_field,
+                "id": id_field,
+                "for": for_field,
+                "timestamp": timestamp,
+                "raw": entry,
+            }
+        )
+    items.sort(key=lambda item: item["idx"])
+
+    map_id = f"hop-map-{next(_HOP_MAP_COUNTER)}"
+    parts = [f"<div id=\"{map_id}\">"]
+    parts.append("<div class=\"hop-map\">")
+    for item in items:
+        idx = item["idx"]
+        label = html.escape(str(item["label"]))
+        active_class = " active" if idx == 0 else ""
+        parts.append("<div class=\"hop-node\">")
+        parts.append(
+            f"<button class=\"hop-btn{active_class}\" data-hop=\"{idx}\" onclick=\"selectHop('{map_id}', {idx})\">{label}</button>"
+        )
+        parts.append("<div class=\"small\">hop</div>")
+        parts.append("</div>")
+        if idx < len(items) - 1:
+            parts.append("<div class=\"hop-line\"></div>")
+    parts.append("</div>")
+
+    parts.append("<div class=\"hop-details\">")
+    for item in items:
+        idx = item["idx"]
+        detail_lines = []
+        if item.get("timestamp"):
+            detail_lines.append(f"timestamp: {item['timestamp']}")
+        if item.get("from"):
+            detail_lines.append(f"from: {item['from']}")
+        if item.get("by"):
+            detail_lines.append(f"by: {item['by']}")
+        if item.get("with"):
+            detail_lines.append(f"with: {item['with']}")
+        if item.get("via"):
+            detail_lines.append(f"via: {item['via']}")
+        if item.get("id"):
+            detail_lines.append(f"id: {item['id']}")
+        if item.get("for"):
+            detail_lines.append(f"for: {item['for']}")
+        detail_lines.append("")
+        detail_lines.append("raw:")
+        detail_lines.append(item.get("raw") or "")
+        detail_text = "\n".join(detail_lines).strip()
+        style = "display:none;"
+        if idx == 0:
+            style = "display:block;"
+        parts.append(
+            f"<div class=\"hop-detail\" data-hop=\"{idx}\" style=\"{style}\">"
+            f"<pre class=\"code-block\">{html.escape(detail_text)}</pre>"
+            "</div>"
+        )
+    parts.append("</div>")
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
 def _extract_received_field(entry: str, key: str) -> str:
     pattern = re.compile(
         rf"\\b{key}\\s+(.+?)(?=\\s+(?:from|by|with|via|id|for)\\b|;|$)",
@@ -950,6 +1082,10 @@ def _score_breakdown_table(breakdown: dict[str, Any]) -> str:
     auth = breakdown.get("auth_failures") or []
     rows.append(
         f"<tr><td>Auth failures</td><td>{html.escape(', '.join(auth) or 'none')}</td><td>{breakdown.get('auth_points', 0)}</td></tr>"
+    )
+    reply_to_mismatch = breakdown.get("reply_to_mismatch", 0)
+    rows.append(
+        f"<tr><td>Reply-To vs From</td><td>{'mismatch' if reply_to_mismatch else 'ok'}</td><td>{breakdown.get('reply_to_points', 0)}</td></tr>"
     )
     vt_url = breakdown.get("vt_url") or {}
     rows.append(
@@ -1349,6 +1485,88 @@ def _format_form_details(form: dict[str, Any]) -> str:
         "<details>"
         "<summary>View</summary>"
         f"<pre class=\"code-block\">{html.escape(content)}</pre>"
+        "</details>"
+    )
+
+
+def _format_form_heuristics(form: dict[str, Any]) -> str:
+    heuristics = form.get("heuristics") or []
+    if not heuristics:
+        return "none"
+    return ", ".join(str(item) for item in heuristics)
+
+
+def _format_reply_to_mismatch(from_addr: str | None, reply_to: str | None) -> str:
+    if not from_addr or not reply_to:
+        return ""
+    from_domain = _extract_email_domain(from_addr)
+    reply_domain = _extract_email_domain(reply_to)
+    if not from_domain or not reply_domain:
+        return ""
+    if from_domain.lower() == reply_domain.lower():
+        return "match"
+    return f"mismatch ({from_domain} vs {reply_domain})"
+
+
+def _extract_email_domain(value: str) -> str:
+    if "<" in value and ">" in value:
+        value = value.split("<", 1)[-1].split(">", 1)[0]
+    if "@" not in value:
+        return ""
+    return value.split("@", 1)[-1].strip()
+
+
+def _format_redirect_chain(chain_info: dict[str, Any] | None, defang_urls: bool) -> str:
+    if not chain_info:
+        return "none"
+    click_info = None
+    server_info = None
+    if "click" in chain_info or "server" in chain_info:
+        click_info = chain_info.get("click")
+        server_info = chain_info.get("server")
+    elif chain_info.get("chain"):
+        click_info = chain_info
+
+    sections = []
+    preview = ""
+
+    if click_info and click_info.get("chain"):
+        click_chain = []
+        for item in click_info.get("chain") or []:
+            text = str(item)
+            if defang_urls:
+                text = _defang(text)
+            click_chain.append(text)
+        if click_chain:
+            providers = click_info.get("providers") or []
+            provider_text = ", ".join(providers) if providers else "tracking"
+            sections.append(f"Click chain ({provider_text}):\n" + "\n".join(click_chain))
+            preview = click_chain[-1]
+
+    if server_info and server_info.get("chain"):
+        server_chain = []
+        for item in server_info.get("chain") or []:
+            url_text = str(item.get("url") or "")
+            status = item.get("status")
+            if defang_urls:
+                url_text = _defang(url_text)
+            suffix = f" [{status}]" if status is not None else ""
+            server_chain.append(f"{url_text}{suffix}")
+        if server_chain:
+            sections.append("Server redirects:\n" + "\n".join(server_chain))
+            preview = server_chain[-1].split(" [", 1)[0]
+        if server_info.get("error"):
+            sections.append(f"Server error: {server_info.get('error')}")
+
+    if not sections:
+        return "none"
+    if not preview:
+        preview = "redirects"
+    details = "\n\n".join(sections)
+    return (
+        "<details>"
+        f"<summary>{html.escape(preview)}</summary>"
+        f"<pre class=\"code-block\">{html.escape(details)}</pre>"
         "</details>"
     )
 

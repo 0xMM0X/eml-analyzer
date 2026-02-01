@@ -25,6 +25,10 @@ class AnalyzerConfig:
     ipinfo_api_key: str | None = None
     url_screenshot_enabled: bool = False
     url_screenshot_timeout_ms: int = 20000
+    url_redirect_resolve: bool = False
+    url_redirect_max_hops: int = 5
+    url_redirect_timeout_seconds: int = 10
+    url_redirect_only_tracked: bool = False
     score_auth_fail: int = 2
     score_vt_url_malicious: int = 5
     score_vt_url_suspicious: int = 3
@@ -44,6 +48,7 @@ class AnalyzerConfig:
     score_hybrid_malicious: int = 4
     score_hybrid_suspicious: int = 2
     score_mx_failed: int = 1
+    score_reply_to_mismatch: int = 2
 
     @staticmethod
     def from_env() -> "AnalyzerConfig":
@@ -73,6 +78,14 @@ class AnalyzerConfig:
             url_screenshot_timeout_ms=_parse_int(
                 os.getenv("URL_SCREENSHOT_TIMEOUT_MS"), 20000
             ),
+            url_redirect_resolve=os.getenv("URL_REDIRECT_RESOLVE", "false").lower()
+            in {"1", "true", "yes"},
+            url_redirect_max_hops=_parse_int(os.getenv("URL_REDIRECT_MAX_HOPS"), 5),
+            url_redirect_timeout_seconds=_parse_int(
+                os.getenv("URL_REDIRECT_TIMEOUT_SECONDS"), 10
+            ),
+            url_redirect_only_tracked=os.getenv("URL_REDIRECT_ONLY_TRACKED", "false").lower()
+            in {"1", "true", "yes"},
             score_auth_fail=_parse_int(os.getenv("SCORE_AUTH_FAIL"), 2),
             score_vt_url_malicious=_parse_int(os.getenv("SCORE_VT_URL_MALICIOUS"), 5),
             score_vt_url_suspicious=_parse_int(os.getenv("SCORE_VT_URL_SUSPICIOUS"), 3),
@@ -92,6 +105,7 @@ class AnalyzerConfig:
             score_hybrid_malicious=_parse_int(os.getenv("SCORE_HYBRID_MALICIOUS"), 4),
             score_hybrid_suspicious=_parse_int(os.getenv("SCORE_HYBRID_SUSPICIOUS"), 2),
             score_mx_failed=_parse_int(os.getenv("SCORE_MX_FAILED"), 1),
+            score_reply_to_mismatch=_parse_int(os.getenv("SCORE_REPLY_TO_MISMATCH"), 2),
         )
 
 

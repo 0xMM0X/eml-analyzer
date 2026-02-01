@@ -130,6 +130,14 @@ def extract_forms_from_html(html: str) -> list[dict[str, Any]]:
         hidden_count = sum(1 for item_type in input_types if item_type == "hidden")
         action = form.get("action") or ""
         external_action = _is_http_url(action)
+        heuristics = _form_heuristics(
+            action=action,
+            method=form.get("method") or "get",
+            has_password=has_password,
+            has_file=has_file,
+            hidden_count=hidden_count,
+            external_action=external_action,
+        )
         results.append(
             {
                 "action": action,
@@ -141,9 +149,41 @@ def extract_forms_from_html(html: str) -> list[dict[str, Any]]:
                 "has_file": has_file,
                 "hidden_count": hidden_count,
                 "external_action": external_action,
+                "heuristics": heuristics,
             }
         )
     return results
+
+
+def _form_heuristics(
+    action: str,
+    method: str,
+    has_password: bool,
+    has_file: bool,
+    hidden_count: int,
+    external_action: bool,
+) -> list[str]:
+    notes: list[str] = []
+    method_lower = method.lower()
+    if not action:
+        notes.append("blank action")
+    if action.startswith("http://"):
+        notes.append("insecure http action")
+    if external_action:
+        notes.append("external action")
+    if method_lower == "post":
+        notes.append("POST method")
+    if has_password:
+        notes.append("password field")
+    if has_file:
+        notes.append("file upload field")
+    if hidden_count >= 3:
+        notes.append(f"{hidden_count} hidden inputs")
+    if has_password and external_action:
+        notes.append("credential capture risk")
+    if has_file and external_action:
+        notes.append("file exfiltration risk")
+    return notes
 
 
 def maybe_defang(url: str, enabled: bool) -> str:
@@ -182,6 +222,64 @@ def detect_rewritten_url(url: str) -> dict[str, str] | None:
         return _build_rewrite("SecureLink", unquote(candidate))
 
     return None
+
+
+def expand_click_tracking(url: str, max_depth: int = 5) -> dict[str, Any] | None:
+    chain = [url]
+    providers: list[str] = []
+    current = url
+    for _ in range(max_depth):
+        expanded = _extract_tracking_target(current)
+        if not expanded:
+            break
+        target, provider = expanded
+        if provider and provider not in providers:
+            providers.append(provider)
+        if target == current:
+            break
+        chain.append(target)
+        current = target
+    if len(chain) <= 1:
+        return None
+    return {"status": "ok", "chain": chain, "providers": providers}
+
+
+def _extract_tracking_target(url: str) -> tuple[str, str] | None:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    host = (parsed.netloc or "").lower()
+    provider = _tracking_provider(host)
+    qs = parse_qs(parsed.query)
+    for key in ("url", "u", "target", "dest", "destination", "redirect", "r", "to", "next", "continue", "link"):
+        if key in qs and qs[key]:
+            candidate = qs[key][0]
+            candidate = unquote(candidate)
+            if not candidate:
+                continue
+            if not candidate.startswith("http"):
+                candidate = "http://" + candidate
+            return candidate, provider
+    return None
+
+
+def _tracking_provider(host: str) -> str:
+    if "safelinks.protection.outlook.com" in host:
+        return "Microsoft Safe Links"
+    if "urldefense" in host:
+        return "Proofpoint"
+    if "mailchimp" in host or "list-manage" in host:
+        return "Mailchimp"
+    if "sendgrid" in host:
+        return "SendGrid"
+    if "mandrillapp" in host:
+        return "Mandrill"
+    if "hubspot" in host:
+        return "HubSpot"
+    if "mailtrack" in host or "track" in host or "trk" in host or "click" in host:
+        return "Tracking"
+    return ""
 
 
 def _build_rewrite(provider: str, candidate: str) -> dict[str, str] | None:

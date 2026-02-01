@@ -23,13 +23,18 @@ Full EML triage toolkit built for investigative workflows. It parses message hea
 - MIME structure visualization in the HTML report
 - Directory scans with include/exclude patterns
 - Correlation view across multiple EMLs in directory scans (summary report)
+- Auto-cluster similar emails by subject similarity + sender domain
 - Timing drift and MTA anomaly detection
 - Attachment magic-byte header verification
 - Thread timeline view for Received chain (visual hop graph)
+- Advanced header path visualization (interactive hop map)
 - Attachment password-protection detection (ZIP/PDF)
 - Attachment entropy scoring (packed/encrypted heuristic)
 - QR code extraction from images/PDFs (optional)
 - Embedded HTML form extraction + analysis
+- Reply-To vs From mismatch scoring + display
+- Click-tracking redirect chain expansion
+- Server-side redirection expansion (optional)
 - IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
 - IP reputation consensus scoring (multi‑source).
 - GeoIP + ASN enrichment for IPs.
@@ -169,6 +174,10 @@ Report defaults:
 - `REPORT_DARK`: Use dark mode HTML by default (true/false)
 - `REPORT_SCORE_DETAILS`: Include score breakdown by default (true/false)
 - `SCORE_*`: Risk scoring weights (see `.env.example` for full list)
+- `URL_REDIRECT_RESOLVE`: Follow server-side redirects for URLs (true/false)
+- `URL_REDIRECT_MAX_HOPS`: Max server-side redirects to follow
+- `URL_REDIRECT_TIMEOUT_SECONDS`: Timeout per redirect request
+- `URL_REDIRECT_ONLY_TRACKED`: Only resolve server redirects for click-tracking URLs
 - `TOOLS_AUTO_DOWNLOAD`: Auto-download external tools if missing (true/false)
 - `REPORT_THEME_FILE`: Path to a JSON palette file for HTML reports
 - `IOC_CACHE_DB`: SQLite cache path for IOC de-duplication across runs
@@ -228,11 +237,6 @@ Risk level mapping:
 
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
-- Safe link rewrite detection (Proofpoint/securelink/Safe Links)
-- Add automated PDF structure heuristics (JS, launch actions, embedded files)
-- Auto-cluster similar emails by subject similarity and sender domain.
-- Click‑tracking redirect chain expansion.
-- Reply-to vs From mismatch scoring + display.
 - Risk score explanation as a JSON‑driven policy file.
 
 
