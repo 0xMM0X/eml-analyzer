@@ -144,6 +144,14 @@ def build_html_report(
         parts.append(".code-block{background:#f8f3ea;color:#2a241d;border:1px solid #d6c8b3;border-radius:10px;padding:10px;overflow:auto;white-space:pre-wrap;}")
     parts.append(".raw-block{max-height:180px;overflow:auto;word-break:break-word;}")
     parts.append(".spacer{height:10px;}")
+    parts.append(".thumb-wrap{position:relative;display:inline-block;}")
+    parts.append(".thumb{cursor:pointer;transition:transform 0.2s ease, box-shadow 0.2s ease;}")
+    parts.append(".thumb:hover{transform:scale(1.02);box-shadow:0 10px 22px rgba(0,0,0,0.22);z-index:5;}")
+    parts.append(".thumb-overlay{display:none;position:fixed;inset:0;background:rgba(12,12,14,0.45);align-items:center;justify-content:center;z-index:9999;}")
+    parts.append(".thumb-overlay img{max-width:45vw;max-height:45vh;border-radius:10px;box-shadow:0 18px 40px rgba(0,0,0,0.35);}")
+    parts.append(".thumb-overlay.show{display:flex;}")
+    parts.append(".thumb-close{position:absolute;top:18px;right:20px;width:36px;height:36px;border-radius:50%;border:none;background:rgba(0,0,0,0.55);color:#fff;font-size:1.2rem;cursor:pointer;}")
+    parts.append(".thumb-close:hover{background:rgba(0,0,0,0.75);}")
     parts.append(".hop-map{display:flex;gap:10px;align-items:center;overflow-x:auto;padding:6px 2px;}")
     parts.append(".hop-node{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:120px;}")
     parts.append(".hop-btn{border:1px solid rgba(0,0,0,0.15);border-radius:999px;padding:6px 10px;cursor:pointer;background:#f6efe4;font-size:0.85rem;}")
@@ -165,15 +173,24 @@ def build_html_report(
         "}"
     )
     parts.append(
-        "function openScreenshot(el){"
-        "  var src = el.getAttribute('data-src');"
-        "  if (!src) return;"
-        "  var w = window.open('', '_blank');"
-        "  if (!w) return;"
-        "  w.document.write('<html><head><title>Screenshot</title></head><body style=\"margin:0;background:#111;display:flex;align-items:center;justify-content:center;\">');"
-        "  w.document.write('<img src=\"'+src+'\" style=\"max-width:100%;max-height:100vh;\"/>');"
-        "  w.document.write('</body></html>');"
-        "  w.document.close();"
+        "function toggleThumb(el){"
+        "  var wrap = el.closest('.thumb-wrap');"
+        "  if (!wrap) return;"
+        "  var overlay = wrap.querySelector('.thumb-overlay');"
+        "  if (!overlay) return;"
+        "  overlay.classList.add('show');"
+        "}"
+    )
+    parts.append(
+        "function closeThumb(el){"
+        "  el.classList.remove('show');"
+        "}"
+    )
+    parts.append(
+        "function closeThumbButton(btn){"
+        "  var overlay = btn.closest('.thumb-overlay');"
+        "  if (!overlay) return;"
+        "  overlay.classList.remove('show');"
         "}"
     )
     parts.append(
@@ -1409,12 +1426,14 @@ def _format_screenshot(screenshot: dict[str, Any] | None) -> str:
         return "ok"
     mime = screenshot.get("mime") or "image/png"
     src = f"data:{mime};base64,{data}"
-    title = "Click for full view"
+    title = "Click to enlarge"
     return (
-        "<div>"
-        f"<a class=\"icon-link\" data-src=\"{html.escape(src)}\" onclick=\"openScreenshot(this)\" title=\"{title}\" style=\"cursor:pointer;\">"
-        f"<img src=\"{src}\" alt=\"screenshot\" style=\"max-width:160px;border-radius:8px;display:block;\" />"
-        "</a>"
+        "<div class=\"thumb-wrap\">"
+        f"<img class=\"thumb\" src=\"{src}\" alt=\"screenshot\" title=\"{title}\" style=\"max-width:160px;border-radius:8px;display:block;\" onclick=\"toggleThumb(this)\" />"
+        f"<div class=\"thumb-overlay\" onclick=\"closeThumb(this)\">"
+        "<button class=\"thumb-close\" onclick=\"closeThumbButton(this);event.stopPropagation();\">×</button>"
+        f"<img src=\"{src}\" alt=\"screenshot enlarged\" />"
+        "</div>"
         "</div>"
     )
 
