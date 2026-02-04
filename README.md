@@ -178,6 +178,7 @@ Report defaults:
 - `URL_REDIRECT_MAX_HOPS`: Max server-side redirects to follow
 - `URL_REDIRECT_TIMEOUT_SECONDS`: Timeout per redirect request
 - `URL_REDIRECT_ONLY_TRACKED`: Only resolve server redirects for click-tracking URLs
+- `VERBOSE`: Enable verbose debug logging by default (true/false)
 - `TOOLS_AUTO_DOWNLOAD`: Auto-download external tools if missing (true/false)
 - `REPORT_THEME_FILE`: Path to a JSON palette file for HTML reports
 - `IOC_CACHE_DB`: SQLite cache path for IOC de-duplication across runs

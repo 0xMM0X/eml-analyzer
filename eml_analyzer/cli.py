@@ -94,7 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("Either -f/--file or -d/--dir is required.")
 
     config = AnalyzerConfig.from_env()
-    analyzer = EmlAnalyzer(config, verbose=args.verbose)
+    verbose = args.verbose or config.verbose
+    analyzer = EmlAnalyzer(config, verbose=verbose)
     eml_paths = _collect_eml_paths(
         args.eml,
         args.dir,
