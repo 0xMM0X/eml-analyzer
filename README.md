@@ -2,196 +2,176 @@
 
 ![Cover](Cover.png)
 
-Full EML triage toolkit built for investigative workflows. It parses message headers and bodies, walks nested EML attachments recursively, extracts URLs, IPs, and attachments, calculates hashes, and enriches findings with threat‑intel lookups. Outputs are available as JSON for deep investigation and as a styled HTML report for quick review.
+EML Analyzer is a professional‑grade email triage toolkit for security analysts. It parses headers and bodies, walks nested EML attachments, extracts IOCs, calculates hashes, and enriches findings with optional threat‑intel lookups. Results are delivered as structured JSON for investigations and a polished HTML report for quick review.
 
-## Features
-- Parses headers and Received chains
-- Extracts URLs from text and HTML parts
-- Extracts public IPs from headers and bodies
-- Computes attachment hashes (MD5/SHA1/SHA256)
-- Queries VirusTotal for hashes and URLs (optional)
-- Queries AbuseIPDB for IP reputation (optional)
-- Queries Kaspersky OpenTIP for hashes, URLs, IPs, and domains (optional)
-- Submits URLs to urlscan.io with private visibility (optional)
-- Recursively analyzes nested EML messages
-- Risk scoring (0-10) with clear (<5), medium (=5), and high (>5) levels
-- Optional attachment extraction to disk
-- JSON and HTML reporting output
-- Sender domain MX checks via MxToolbox (optional)
-- Office macro extraction with oletools/olefile support
-- PDF attachment analysis with peepdf (optional) + structure heuristics (JS/Launch/Embedded)
-- MIME structure visualization in the HTML report
+## Table of Contents
+1. [Overview](#overview)
+2. [Capabilities](#capabilities)
+3. [Install](#install)
+4. [Quick Start](#quick-start)
+5. [Usage](#usage)
+6. [Configuration](#configuration)
+7. [Output](#output)
+8. [Risk Scoring](#risk-scoring)
+9. [Planned Features](#planned-features)
+
+## Overview
+- Purpose‑built for email forensics and phishing triage
+- Recursive EML parsing with attachment analysis
+- IOC enrichment across multiple vendors (optional)
+- Analyst‑friendly HTML reports + JSON for automation
+
+## Capabilities
+
+**Core Analysis**
+- Header parsing, Received chains, and timing/MTA anomaly detection
+- URL extraction (text/HTML), click‑tracking expansion, optional server‑side redirects
+- IP extraction from headers and bodies
+- Attachment hashing (MD5/SHA1/SHA256)
+- Recursive nested EML analysis
+- MIME structure visualization
+- Risk scoring (0‑10) with clear/medium/high levels
+- JSON + HTML reporting
 - Directory scans with include/exclude patterns
-- Correlation view across multiple EMLs in directory scans (summary report)
-- Auto-cluster similar emails by subject similarity + sender domain
-- Timing drift and MTA anomaly detection
-- Attachment magic-byte header verification
-- Thread timeline view for Received chain (visual hop graph)
-- Advanced header path visualization (interactive hop map)
-- Attachment password-protection detection (ZIP/PDF)
-- Attachment entropy scoring (packed/encrypted heuristic)
-- QR code extraction from images/PDFs (optional)
+- Correlation view across multi‑EML scans
+- Subject clustering by similarity + sender domain
+- Reply‑To vs From mismatch scoring + display
+- Interactive hop map for header path visualization
+
+**Threat Intel (Optional)**
+- VirusTotal (hash + URL)
+- AbuseIPDB (IP reputation)
+- Kaspersky OpenTIP (hash/URL/IP/domain)
+- urlscan.io (URL scanning)
+- Hybrid Analysis (hash lookup)
+- MxToolbox (sender domain MX checks)
+- GeoIP + ASN enrichment (ipinfo.io)
+
+**Attachment Analysis (Optional)**
+- Office macro extraction (oletools/olefile)
+- PDF inspection (peepdf + pdfid + pdf-parser)
+- PDF structure heuristics (JS/Launch/Embedded)
+- Password‑protection detection (ZIP/PDF)
+- Entropy scoring (packed/encrypted heuristic)
+- QR code extraction from images/PDFs
 - Embedded HTML form extraction + analysis
-- Reply-To vs From mismatch scoring + display
-- Click-tracking redirect chain expansion
-- Server-side redirection expansion (optional)
-- IOC de-duplication across runs (cache DB for hashes/URLs/IPs/domains).
-- IP reputation consensus scoring (multi‑source).
-- GeoIP + ASN enrichment for IPs.
-- URL landing page screenshot via headless browser (optional).
+- URL landing page screenshots (Playwright)
 
+---
 
+## Install
 
-## Setup
-
+Minimal install:
 ```bash
-python -m venv .venv
-.\.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
 Full install (all optional integrations):
-
 ```bash
 pip install -r requirements.full.txt
 ```
 
-Optional (full VBA macro bodies):
-
-```bash
-pip install olefile
-```
-
-Preferred (olevba decoding for macro extraction):
-
+Optional tools:
 ```bash
 pip install oletools
-```
-
-Optional (PDF attachment analysis):
-
-```bash
+pip install olefile
 pip install peepdf-3
-```
-
-Optional (pdfid from pip):
-
-```bash
 pip install pdfid
-```
-
-Optional (QR extraction dependencies):
-
-```bash
 pip install pillow pyzbar pymupdf
 ```
 
-Optional (pdf-parser.py from DidierStevensSuite) OR just set the tool installing flag to true:
-
+Optional (pdf-parser.py from DidierStevensSuite), or set `TOOLS_AUTO_DOWNLOAD=true`:
 ```bash
 curl -L https://raw.githubusercontent.com/DidierStevens/DidierStevensSuite/master/pdf-parser.py -o pdf-parser.py
 ```
 
+---
+
+## Quick Start
+```bash
+python -m venv .venv
+.\.venv\Scripts\activate
+pip install -r requirements.txt
+python -m eml_analyzer.cli -f path\to\message.eml --json --html
+```
+
+---
+
 ## Usage
 
+Single file:
 ```bash
 python -m eml_analyzer.cli -f path\to\message.eml --json
 ```
-Defaults to `path\to\message-report.json`. Use `--json custom.json` to override.
 
-If neither `--json` nor `--html` are provided, the CLI now writes both by default.
-
-Write both JSON and HTML reports:
-
+Write both JSON + HTML (default if neither is provided):
 ```bash
 python -m eml_analyzer.cli -f message.eml --json --html
 ```
-Defang URLs in the HTML report:
 
-```bash
-python -m eml_analyzer.cli -f message.eml --html --defang-urls
-```
-Analyze a directory of EML files (writes to `output/` under the directory):
-
+Directory scan:
 ```bash
 python -m eml_analyzer.cli -d path\to\emls --json --html
 ```
-Recursive directory scan with filters:
 
+Recursive scan with filters:
 ```bash
 python -m eml_analyzer.cli -d path\to\emls --recursive --include "*.eml" --exclude "*newsletter*"
 ```
-Dark mode HTML:
 
+Dark mode report:
 ```bash
 python -m eml_analyzer.cli -f message.eml --html --dark
 ```
-Add verbose debugging:
 
+Verbose + debug:
 ```bash
-python -m eml_analyzer.cli -f message.eml --json --html -v
+python -m eml_analyzer.cli -f message.eml --json --html -v --debug
 ```
-Include score calculation details:
-
-```bash
-python -m eml_analyzer.cli -f message.eml --json --html --score-details
-```
-Defaults to `message-report.json` and `message-report.html`.
 
 Extract attachments:
-
 ```bash
 python -m eml_analyzer.cli -f message.eml -e --extract-dir extracted_files
 ```
-If `--extract-dir` is omitted, attachments are saved alongside the input EML.
+If `--extract-dir` is omitted, attachments are saved next to the input EML.
 
-Optional VirusTotal API key:
+---
 
-```bash
-set VT_API_KEY=your_key_here
-python -m eml_analyzer.cli -f message.eml --output report.json
-```
+## Configuration
 
-Submit URLs to VirusTotal if no report exists:
+You can set these in `.env` (see `.env.example`).
 
-```bash
-python -m eml_analyzer.cli -f message.eml --allow-url-submission
-```
-
-## Configuration (Environment Variables)
-- `VT_API_KEY`: VirusTotal API key
-- `VT_TIMEOUT_SECONDS`: Request timeout (default: 20)
-- `MAX_BYTES_FOR_HASH`: Limit bytes hashed per attachment
-- `VT_ALLOW_URL_SUBMISSION`: Allow URL submission (true/false)
-- `ABUSEIPDB_API_KEY`: AbuseIPDB API key
-- `URLSCAN_API_KEY`: urlscan.io API key
-- `HYBRID_API_KEY`: Hybrid Analysis API key
-- `MXTOOLBOX_API_KEY`: MxToolbox API key
-- `OPENTIP_API_KEY`: Kaspersky OpenTIP API token
-
-You can set these once in `.env` (see `.env.example`).
-Report defaults:
-- `REPORT_DARK`: Use dark mode HTML by default (true/false)
-- `REPORT_SCORE_DETAILS`: Include score breakdown by default (true/false)
-- `SCORE_*`: Risk scoring weights (see `.env.example` for full list)
-- `URL_REDIRECT_RESOLVE`: Follow server-side redirects for URLs (true/false)
-- `URL_REDIRECT_MAX_HOPS`: Max server-side redirects to follow
-- `URL_REDIRECT_TIMEOUT_SECONDS`: Timeout per redirect request
-- `URL_REDIRECT_ONLY_TRACKED`: Only resolve server redirects for click-tracking URLs
-- `VERBOSE`: Enable verbose debug logging by default (true/false)
-- `DEBUG`: Enable detailed debug logging with tracebacks (true/false)
-- `DEBUG_LOG_FILE`: Write debug logs to a file (path)
-- `TOOLS_AUTO_DOWNLOAD`: Auto-download external tools if missing (true/false)
-- `REPORT_THEME_FILE`: Path to a JSON palette file for HTML reports
-- `IOC_CACHE_DB`: SQLite cache path for IOC de-duplication across runs
-- `IOC_CACHE_TTL_HOURS`: Cache TTL in hours (optional)
-- `REPORT_DEFANG_URLS`: Defang URLs in HTML reports by default (true/false)
-- `IPINFO_API_KEY`: ipinfo.io token for GeoIP/ASN enrichment (optional)
-- `URL_SCREENSHOT_ENABLED`: Enable URL landing page screenshots (true/false)
-- `URL_SCREENSHOT_TIMEOUT_MS`: Screenshot timeout in ms (default: 20000)
+| Variable | Description | Default |
+|---|---|---|
+| `VT_API_KEY` | VirusTotal API key |  |
+| `VT_TIMEOUT_SECONDS` | VT request timeout | 20 |
+| `MAX_BYTES_FOR_HASH` | Limit bytes hashed per attachment |  |
+| `VT_ALLOW_URL_SUBMISSION` | Submit URLs if not found | false |
+| `ABUSEIPDB_API_KEY` | AbuseIPDB API key |  |
+| `URLSCAN_API_KEY` | urlscan.io API key |  |
+| `HYBRID_API_KEY` | Hybrid Analysis API key |  |
+| `MXTOOLBOX_API_KEY` | MxToolbox API key |  |
+| `OPENTIP_API_KEY` | Kaspersky OpenTIP API token |  |
+| `IPINFO_API_KEY` | ipinfo.io token for GeoIP/ASN |  |
+| `REPORT_DARK` | Dark mode HTML by default | false |
+| `REPORT_SCORE_DETAILS` | Include score breakdown | false |
+| `REPORT_DEFANG_URLS` | Defang URLs in HTML | false |
+| `REPORT_THEME_FILE` | JSON palette file |  |
+| `VERBOSE` | Verbose logging | false |
+| `DEBUG` | Detailed debug logging | false |
+| `DEBUG_LOG_FILE` | Write logs to file |  |
+| `URL_SCREENSHOT_ENABLED` | Enable URL screenshots | false |
+| `URL_SCREENSHOT_TIMEOUT_MS` | Screenshot timeout | 20000 |
+| `URL_REDIRECT_RESOLVE` | Resolve server redirects | false |
+| `URL_REDIRECT_ONLY_TRACKED` | Only resolve tracked URLs | false |
+| `URL_REDIRECT_MAX_HOPS` | Max redirect hops | 5 |
+| `URL_REDIRECT_TIMEOUT_SECONDS` | Redirect timeout | 10 |
+| `IOC_CACHE_DB` | IOC cache DB path |  |
+| `IOC_CACHE_TTL_HOURS` | Cache TTL in hours |  |
+| `TOOLS_AUTO_DOWNLOAD` | Auto-download external tools | false |
+| `SCORE_*` | Scoring weights | see `.env.example` |
 
 Custom theme file example:
-
 ```json
 {
   "dark": {
@@ -222,26 +202,34 @@ Custom theme file example:
 }
 ```
 
+---
+
 ## Output
-The report is JSON containing root message analysis, nested EML details, URL findings, attachment hashes, optional VirusTotal results, and `risk_score`/`risk_level` fields in `statistics`.
+
+The JSON report includes root message analysis, nested EML details, URLs/IPs/attachments, optional intel results, and `risk_score` / `risk_level` in `statistics`.
+
+---
 
 ## Risk Scoring
-The risk score is a 0-10 value built from multiple signals and capped at 10:
-- Authentication failures: `spf`, `dkim`, or `dmarc` with fail/softfail adds +2 each.
-- VirusTotal URL results: malicious adds +5, suspicious adds +3.
-- VirusTotal file results: malicious adds +6, suspicious adds +3.
-- Executable attachments add +1 (e.g., `.exe`, `.js`, `.ps1`).
-- AbuseIPDB confidence: >=80 adds +5, >=50 adds +3, >=25 adds +1.
 
-Risk level mapping:
+Signals (capped at 10):
+- Authentication failures (`spf`, `dkim`, `dmarc`): +2 each
+- VirusTotal URL: malicious +5, suspicious +3
+- VirusTotal file: malicious +6, suspicious +3
+- Executable attachments: +1
+- AbuseIPDB confidence: >=80 +5, >=50 +3, >=25 +1
+
+Risk levels:
 - Clear: score < 5
 - Medium: score = 5
 - High: score > 5
 
+---
+
 ## Planned Features
 - URL/attachment sandboxing integrations (open-source detonation feeds)
-- Risk score explanation as a JSON‑driven policy file.
+- Risk score explanation as a JSON‑driven policy file
 
+---
 
-
-### Please feel free to provide any recommendations or contribute enhancements to the tool as you see fit.
+Feel free to open an issue or suggest enhancements.
