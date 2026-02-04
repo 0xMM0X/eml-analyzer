@@ -50,10 +50,11 @@ def build_html_report(
     parts.append("h1{margin:0 0 8px 0;font-size:2.1rem;}")
     parts.append("h2{margin:0 0 12px 0;font-size:1.4rem;}")
     parts.append("h3{margin:0 0 8px 0;font-size:1.1rem;}")
-    parts.append("table{width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;}")
+    parts.append("table{width:100%;max-width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;}")
     parts.append(
         "th,td{border-bottom:1px solid #efe7db;padding:8px 10px;text-align:left;vertical-align:top;font-size:0.95rem;}"
     )
+    parts.append("th,td{overflow-wrap:anywhere;word-break:break-word;}")
     parts.append(f"th{{background:{palette['table_th_bg']};font-weight:bold;color:{palette['table_th_fg']};}}")
     parts.append(f"tr:nth-child(even) td{{background:{palette['table_even_bg']};}}")
     parts.append(f"tr:hover td{{background:{palette['table_hover_bg']};}}")

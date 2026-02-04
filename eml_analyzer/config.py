@@ -23,6 +23,7 @@ class AnalyzerConfig:
     ioc_cache_ttl_hours: int | None = None
     report_defang_urls: bool = False
     verbose: bool = False
+    debug: bool = False
     ipinfo_api_key: str | None = None
     url_screenshot_enabled: bool = False
     url_screenshot_timeout_ms: int = 20000
@@ -74,6 +75,7 @@ class AnalyzerConfig:
             report_defang_urls=os.getenv("REPORT_DEFANG_URLS", "false").lower()
             in {"1", "true", "yes"},
             verbose=os.getenv("VERBOSE", "false").lower() in {"1", "true", "yes"},
+            debug=os.getenv("DEBUG", "false").lower() in {"1", "true", "yes"},
             ipinfo_api_key=os.getenv("IPINFO_API_KEY"),
             url_screenshot_enabled=os.getenv("URL_SCREENSHOT_ENABLED", "false").lower()
             in {"1", "true", "yes"},

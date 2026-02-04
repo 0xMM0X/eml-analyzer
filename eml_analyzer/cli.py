@@ -65,6 +65,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Enable verbose debug logging.",
     )
     parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable detailed debug logging with tracebacks.",
+    )
+    parser.add_argument(
         "--dark",
         action="store_true",
         help="Generate a dark mode HTML report.",
@@ -95,6 +100,9 @@ def main(argv: list[str] | None = None) -> int:
 
     config = AnalyzerConfig.from_env()
     verbose = args.verbose or config.verbose
+    debug = args.debug or config.debug
+    if debug:
+        verbose = True
     analyzer = EmlAnalyzer(config, verbose=verbose)
     eml_paths = _collect_eml_paths(
         args.eml,
@@ -127,10 +135,19 @@ def main(argv: list[str] | None = None) -> int:
         extract_dir = None
         if args.extract_attachments:
             extract_dir = args.extract_dir or _default_extract_dir(eml_path)
-        report = analyzer.analyze_path(
-            eml_path,
-            extract_dir=extract_dir,
-        )
+        try:
+            report = analyzer.analyze_path(
+                eml_path,
+                extract_dir=extract_dir,
+            )
+        except Exception as exc:
+            if debug:
+                import traceback
+
+                traceback.print_exc()
+            else:
+                sys.stderr.write(f"Error analyzing {eml_path}: {exc}\n")
+            continue
         output = analyzer.report_as_dict(report)
         all_reports.append(output)
         show_score_details = args.score_details or config.report_score_details
