@@ -13,7 +13,7 @@ from datetime import timezone
 from typing import Any
 
 from .hashing import hash_bytes
-from .log_utils import log
+from .log_utils import log, log_debug
 from .office_utils import analyze_office_attachment
 from .pdf_utils import analyze_pdf_attachment
 from .qr_utils import extract_qr_codes
@@ -38,6 +38,7 @@ class EmlParser:
         max_depth: int = 5,
         extract_dir: str | None = None,
         verbose: bool = False,
+        debug: bool = False,
     ) -> None:
         self._vt_client = vt_client
         self._max_bytes_for_hash = max_bytes_for_hash
@@ -45,9 +46,11 @@ class EmlParser:
         self._extract_dir = extract_dir
         self._attachment_index = 0
         self._verbose = verbose
+        self._debug = debug
 
     def parse_bytes(self, data: bytes, depth: int = 0) -> MessageAnalysis:
         log(self._verbose, f"Parsing EML bytes (depth={depth}, size={len(data)})")
+        log_debug(self._debug, f"Raw bytes length: {len(data)}")
         msg = email.message_from_bytes(data, policy=policy.default)
         return self._parse_message(msg, depth)
 
@@ -65,6 +68,10 @@ class EmlParser:
             raw_headers=raw_headers,
         )
         analysis.mime_tree = _build_mime_tree(msg)
+        log_debug(
+            self._debug,
+            f"Parsed headers: subject={analysis.subject!r}, from={analysis.from_addr!r}, to={analysis.to_addrs}",
+        )
         self._extract_sender_domain(analysis)
         self._extract_ips_from_headers(headers, analysis)
 
@@ -92,6 +99,7 @@ class EmlParser:
         payload = part.get_payload(decode=True) or b""
         size = len(payload)
         log(self._verbose, f"Attachment: {filename} type={content_type} size={size}")
+        log_debug(self._debug, f"Attachment content_type={content_type}, filename={filename}, size={size}")
 
         hash_payload = payload
         if self._max_bytes_for_hash is not None:
@@ -154,6 +162,7 @@ class EmlParser:
             forms = extract_forms_from_html(text)
             if forms:
                 analysis.forms.extend(forms)
+                log_debug(self._debug, f"HTML forms extracted: {len(forms)}")
             for href, visible in extract_anchor_pairs(text):
                 if not _is_http_like(visible):
                     continue
@@ -207,6 +216,8 @@ class EmlParser:
                         redirect_chain={"click": expand_click_tracking(url)},
                     )
                 )
+        if urls:
+            log_debug(self._debug, f"URLs extracted from {source}: {len(urls)}")
 
     def _extract_ips_from_part(self, part: Message, analysis: MessageAnalysis) -> None:
         try:

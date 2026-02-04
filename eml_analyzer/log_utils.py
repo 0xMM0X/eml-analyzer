@@ -11,3 +11,10 @@ def log(verbose: bool, message: str) -> None:
         return
     timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     sys.stderr.write(f"[{timestamp} UTC] {message}\n")
+
+
+def log_debug(debug: bool, message: str) -> None:
+    if not debug:
+        return
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    sys.stderr.write(f"[{timestamp} UTC][DEBUG] {message}\n")

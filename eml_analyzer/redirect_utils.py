@@ -7,11 +7,13 @@ from urllib.parse import urljoin
 
 import requests
 
+from .log_utils import log_debug
 
 def resolve_redirect_chain(
     url: str,
     timeout_seconds: int = 10,
     max_hops: int = 5,
+    debug: bool = False,
 ) -> dict[str, Any]:
     session = requests.Session()
     headers = {"User-Agent": "EMLAnalyzer/1.0"}
@@ -21,10 +23,12 @@ def resolve_redirect_chain(
 
     for _ in range(max_hops):
         try:
+            log_debug(debug, f"redirect resolve {current}")
             response = _request_no_redirect(
                 session, current, timeout_seconds, headers
             )
         except requests.RequestException as exc:
+            log_debug(debug, f"redirect error {current} exc={exc}")
             error = str(exc)
             break
 

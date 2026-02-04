@@ -5,11 +5,14 @@ from typing import Any
 
 import requests
 
+from .log_utils import log_debug
+
 
 @dataclass
 class AbuseIpdbClient:
     api_key: str
     timeout_seconds: int = 20
+    debug: bool = False
 
     def check_ip(self, ip: str) -> dict[str, Any]:
         url = "https://api.abuseipdb.com/api/v2/check"
@@ -22,6 +25,7 @@ class AbuseIpdbClient:
             "maxAgeInDays": 90,
         }
         try:
+            log_debug(self.debug, f"AbuseIPDB request ip={ip} url={url}")
             response = requests.get(
                 url,
                 headers=headers,
@@ -29,15 +33,18 @@ class AbuseIpdbClient:
                 timeout=self.timeout_seconds,
             )
         except requests.RequestException as exc:
+            log_debug(self.debug, f"AbuseIPDB error ip={ip} exc={exc}")
             return {"status": "error", "error": str(exc)}
 
         if response.status_code >= 400:
+            log_debug(self.debug, f"AbuseIPDB error ip={ip} status={response.status_code}")
             return {
                 "status": "error",
                 "error": f"{response.status_code} {response.reason}",
                 "body": _safe_json(response),
             }
 
+        log_debug(self.debug, f"AbuseIPDB ok ip={ip} status={response.status_code}")
         return {
             "status": "ok",
             "data": _safe_json(response),

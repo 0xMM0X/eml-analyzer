@@ -103,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     debug = args.debug or config.debug
     if debug:
         verbose = True
-    analyzer = EmlAnalyzer(config, verbose=verbose)
+    analyzer = EmlAnalyzer(config, verbose=verbose, debug=debug)
     eml_paths = _collect_eml_paths(
         args.eml,
         args.dir,

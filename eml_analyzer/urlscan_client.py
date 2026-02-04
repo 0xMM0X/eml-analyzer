@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import requests
 
+from .log_utils import log_debug
 
 @dataclass
 class UrlscanClient:
@@ -15,6 +16,7 @@ class UrlscanClient:
     poll_attempts: int = 8
     poll_delay_seconds: int = 3
     visibility: str = "private"  # <-- CHANGED (public|unlisted typically work; private often doesn't)
+    debug: bool = False
 
     def scan_url(self, url: str) -> dict[str, Any]:
         if not _is_http_url(url):
@@ -50,6 +52,7 @@ class UrlscanClient:
         payload = {"url": url, "visibility": self.visibility}
 
         try:
+            log_debug(self.debug, f"urlscan submit url={url} visibility={self.visibility}")
             response = requests.post(
                 endpoint,
                 headers=self._headers(),
@@ -57,10 +60,12 @@ class UrlscanClient:
                 timeout=self.timeout_seconds,
             )
         except requests.RequestException as exc:
+            log_debug(self.debug, f"urlscan submit error url={url} exc={exc}")
             return {"status": "error", "error": str(exc)}
 
         if response.status_code >= 400:
             body = _safe_json(response)
+            log_debug(self.debug, f"urlscan submit error url={url} status={response.status_code}")
             return {
                 "status": "error",
                 "error": f"{response.status_code} {response.reason}",
@@ -68,6 +73,7 @@ class UrlscanClient:
                 "submitted_payload": payload,
             }
 
+        log_debug(self.debug, f"urlscan submit ok url={url} status={response.status_code}")
         return {"status": "ok", "data": _safe_json(response)}
 
     def _poll_result(self, api_url: str, submission: dict[str, Any] | None) -> dict[str, Any]:
@@ -75,15 +81,18 @@ class UrlscanClient:
 
         for attempt in range(attempts):
             try:
+                log_debug(self.debug, f"urlscan poll {api_url} attempt={attempt + 1}/{attempts}")
                 response = requests.get(
                     api_url,
                     headers=self._headers(),
                     timeout=self.timeout_seconds,
                 )
             except requests.RequestException as exc:
+                log_debug(self.debug, f"urlscan poll error api_url={api_url} exc={exc}")
                 return {"status": "error", "error": str(exc)}
 
             if response.status_code == 200:
+                log_debug(self.debug, f"urlscan poll ok api_url={api_url}")
                 return {"status": "ok", "data": _safe_json(response)}
 
             # urlscan commonly returns 404 while the result is still being processed.
@@ -92,6 +101,7 @@ class UrlscanClient:
                 if attempt < attempts - 1:
                     time.sleep(self.poll_delay_seconds)
                     continue
+                log_debug(self.debug, f"urlscan poll pending api_url={api_url} status={response.status_code}")
                 return {
                     "status": "pending",
                     "submission": submission,
@@ -99,6 +109,7 @@ class UrlscanClient:
                     "api_url": api_url,
                 }
 
+            log_debug(self.debug, f"urlscan poll error api_url={api_url} status={response.status_code}")
             return {
                 "status": "error",
                 "error": f"{response.status_code} {response.reason}",

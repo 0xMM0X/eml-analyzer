@@ -13,7 +13,7 @@ from .ipinfo_client import IpInfoClient
 from .url_screenshot import UrlScreenshotter
 from .hybrid_analysis_client import HybridAnalysisClient
 from .eml_parser import EmlParser
-from .log_utils import log
+from .log_utils import log, log_debug
 from .mxtoolbox_client import MxToolboxClient
 from .models import AnalysisReport, MessageAnalysis
 from .opentip_client import OpenTipClient
@@ -23,44 +23,46 @@ from .virustotal_client import VirusTotalClient
 
 
 class EmlAnalyzer:
-    def __init__(self, config: AnalyzerConfig, verbose: bool = False) -> None:
+    def __init__(self, config: AnalyzerConfig, verbose: bool = False, debug: bool = False) -> None:
         self._config = config
         self._verbose = verbose
+        self._debug = debug
         self._vt_client = (
             VirusTotalClient(
                 api_key=config.vt_api_key,
                 timeout_seconds=config.vt_timeout_seconds,
                 allow_url_submission=config.allow_url_submission,
+                debug=self._debug,
             )
             if config.vt_api_key
             else None
         )
         self._abuse_client = (
-            AbuseIpdbClient(api_key=config.abuseipdb_api_key)
+            AbuseIpdbClient(api_key=config.abuseipdb_api_key, debug=self._debug)
             if config.abuseipdb_api_key
             else None
         )
         self._urlscan_client = (
-            UrlscanClient(api_key=config.urlscan_api_key)
+            UrlscanClient(api_key=config.urlscan_api_key, debug=self._debug)
             if config.urlscan_api_key
             else None
         )
         self._hybrid_client = (
-            HybridAnalysisClient(api_key=config.hybrid_api_key)
+            HybridAnalysisClient(api_key=config.hybrid_api_key, debug=self._debug)
             if config.hybrid_api_key
             else None
         )
         self._mxtoolbox_client = (
-            MxToolboxClient(api_key=config.mxtoolbox_api_key)
+            MxToolboxClient(api_key=config.mxtoolbox_api_key, debug=self._debug)
             if config.mxtoolbox_api_key
             else None
         )
         self._opentip_client = (
-            OpenTipClient(api_key=config.opentip_api_key)
+            OpenTipClient(api_key=config.opentip_api_key, debug=self._debug)
             if config.opentip_api_key
             else None
         )
-        self._ipinfo_client = IpInfoClient(api_key=config.ipinfo_api_key)
+        self._ipinfo_client = IpInfoClient(api_key=config.ipinfo_api_key, debug=self._debug)
         self._cache = None
         if config.ioc_cache_db:
             ttl_seconds = None
@@ -70,7 +72,8 @@ class EmlAnalyzer:
         self._screenshotter = None
         if config.url_screenshot_enabled:
             self._screenshotter = UrlScreenshotter(
-                timeout_ms=config.url_screenshot_timeout_ms
+                timeout_ms=config.url_screenshot_timeout_ms,
+                debug=self._debug,
             )
 
     def analyze_path(
@@ -86,8 +89,13 @@ class EmlAnalyzer:
             max_bytes_for_hash=self._config.max_bytes_for_hash,
             extract_dir=extract_dir,
             verbose=self._verbose,
+            debug=self._debug,
         )
         root = parser.parse_bytes(data)
+        log_debug(
+            self._debug,
+            f"Parsed counts: urls={len(root.urls)}, ips={len(root.ips)}, attachments={len(root.attachments)}",
+        )
         if self._vt_client:
             log(self._verbose, "Enriching URLs via VirusTotal")
             self._enrich_urls_recursive(root)
@@ -138,6 +146,7 @@ class EmlAnalyzer:
                 log(self._verbose, f"VT lookup for URL {target}")
                 seen[target] = self._cached_lookup("vt_url", target, self._vt_client.get_url_report)
             url.vt = seen[target]
+            log_debug(self._debug, f"VT URL status: {target} -> {url.vt.get('status') if url.vt else 'none'}")
 
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
@@ -156,6 +165,7 @@ class EmlAnalyzer:
                 log(self._verbose, f"AbuseIPDB lookup for IP {ip.ip}")
                 seen[ip.ip] = self._cached_lookup("abuse_ip", ip.ip, self._abuse_client.check_ip)
             ip.abuseipdb = seen[ip.ip]
+            log_debug(self._debug, f"AbuseIPDB status: {ip.ip} -> {ip.abuseipdb.get('status') if ip.abuseipdb else 'none'}")
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):
@@ -173,6 +183,7 @@ class EmlAnalyzer:
                 log(self._verbose, f"GeoIP lookup for IP {ip.ip}")
                 seen[ip.ip] = self._cached_lookup("geoip_ip", ip.ip, self._ipinfo_client.lookup)
             ip.geoip = seen[ip.ip]
+            log_debug(self._debug, f"GeoIP status: {ip.ip} -> {ip.geoip.get('status') if ip.geoip else 'none'}")
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):
@@ -191,6 +202,7 @@ class EmlAnalyzer:
                 log(self._verbose, f"urlscan.io submit {target}")
                 seen[target] = self._cached_lookup("urlscan_url", target, self._urlscan_client.scan_url)
             url.urlscan = seen[target]
+            log_debug(self._debug, f"urlscan status: {target} -> {url.urlscan.get('status') if url.urlscan else 'none'}")
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):
@@ -223,6 +235,7 @@ class EmlAnalyzer:
                         value,
                         timeout_seconds=self._config.url_redirect_timeout_seconds,
                         max_hops=self._config.url_redirect_max_hops,
+                        debug=self._debug,
                     ),
                 )
             result = seen[target]
@@ -251,6 +264,7 @@ class EmlAnalyzer:
                 log(self._verbose, f"MxToolbox lookup for domain {domain.domain}")
                 seen[domain.domain] = self._cached_lookup("mx_domain", domain.domain, self._mxtoolbox_client.lookup_domain)
             domain.mxtoolbox = seen[domain.domain]
+            log_debug(self._debug, f"MxToolbox status: {domain.domain} -> {domain.mxtoolbox.get('status') if domain.mxtoolbox else 'none'}")
         for attachment in analysis.attachments:
             nested = attachment.nested_eml
             if isinstance(nested, MessageAnalysis):

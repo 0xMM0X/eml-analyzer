@@ -8,6 +8,7 @@ from typing import Any
 
 import requests
 
+from .log_utils import log_debug
 
 @dataclass
 class VirusTotalClient:
@@ -15,6 +16,7 @@ class VirusTotalClient:
     timeout_seconds: int = 20
     allow_url_submission: bool = False
     max_requests_per_minute: int = 4
+    debug: bool = False
 
     def __post_init__(self) -> None:
         self._request_times: deque[float] = deque()
@@ -44,6 +46,7 @@ class VirusTotalClient:
         url = f"https://www.virustotal.com/api/v3{path}"
         headers = {"x-apikey": self.api_key}
         try:
+            log_debug(self.debug, f"VT request {method} {path}")
             response = requests.request(
                 method,
                 url,
@@ -52,18 +55,22 @@ class VirusTotalClient:
                 timeout=self.timeout_seconds,
             )
         except requests.RequestException as exc:
+            log_debug(self.debug, f"VT error {method} {path} exc={exc}")
             return {"status": "error", "error": str(exc)}
 
         if response.status_code == 404:
+            log_debug(self.debug, f"VT not_found {method} {path}")
             return {"status": "not_found"}
 
         if response.status_code >= 400:
+            log_debug(self.debug, f"VT error {method} {path} status={response.status_code}")
             return {
                 "status": "error",
                 "error": f"{response.status_code} {response.reason}",
                 "body": _safe_json(response),
             }
 
+        log_debug(self.debug, f"VT ok {method} {path} status={response.status_code}")
         return {
             "status": "ok",
             "data": _safe_json(response),
