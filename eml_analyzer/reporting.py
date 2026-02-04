@@ -145,9 +145,11 @@ def build_html_report(
     parts.append(".url-cell{min-width:260px;}")
     parts.append(".redirect-cell{min-width:220px;}")
     parts.append(".intel-cell{min-width:140px;}")
+    parts.append(".screenshot-cell{min-width:190px;}")
     parts.append(".scroll-cell .cell-value{display:block;max-width:320px;white-space:nowrap;overflow:auto;}")
     parts.append(".redirect-cell.scroll-cell .cell-value{max-width:260px;}")
     parts.append(".intel-cell .cell-value{white-space:normal;}")
+    parts.append(".screenshot-cell .cell-value{white-space:normal;word-break:normal;overflow:visible;}")
     parts.append(".table-wrap{overflow-x:auto;}")
     parts.append(".table-wrap{max-width:100%;}")
     parts.append(".table-wrap::-webkit-scrollbar{height:10px;}")
@@ -381,7 +383,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                     f"<td class=\"intel-cell\">{_cell_value(_format_table_value(vt_summary), vt_summary)}</td>",
                     f"<td class=\"intel-cell\">{_cell_value(_format_table_value(urlscan_summary), urlscan_summary)}</td>",
                     f"<td class=\"intel-cell\">{_cell_value(_format_table_value(opentip_summary), opentip_summary)}</td>",
-                    f"<td>{_cell_value(screenshot_html, None)}</td>",
+                    f"<td class=\"screenshot-cell\">{_cell_value(screenshot_html, None)}</td>",
                 ]
             )
             parts.append("<tr>" + "".join(row_cells) + "</tr>")
