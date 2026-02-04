@@ -102,6 +102,7 @@ def build_html_report(
     parts.append(f".badge-ok{{background:{palette['badge_ok_bg']};color:{palette['badge_ok_fg']};}}")
     parts.append(f".badge-warn{{background:{palette['badge_warn_bg']};color:{palette['badge_warn_fg']};}}")
     parts.append(".pill-group{display:inline-flex;flex-wrap:wrap;gap:6px;}")
+    parts.append(".pill-group{flex-wrap:nowrap;white-space:nowrap;}")
     parts.append(".mini-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;background:rgba(0,0,0,0.06);}")
     parts.append(f".mini-pill{{background:{palette['mini_pill_bg']};}}")
     parts.append(".received-list{list-style:none;margin:0;padding:0;}")
@@ -139,7 +140,9 @@ def build_html_report(
     parts.append(".cell-value{flex:1;min-width:0;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;word-break:break-word;}")
     parts.append(".cell .copy-btn{margin-left:auto;}")
     parts.append(".url-cell{min-width:260px;}")
-    parts.append(".url-cell .cell-value{word-break:break-all;overflow-wrap:anywhere;}")
+    parts.append(".url-cell .cell-value{display:block;max-width:320px;white-space:nowrap;overflow:auto;}")
+    parts.append(".table-wrap{overflow-x:auto;}")
+    parts.append(".url-table{table-layout:fixed;}")
     if theme == "dark":
         parts.append(".code-block{background:#0f1622;color:#e5eef9;border:1px solid #2f3d52;border-radius:10px;padding:10px;overflow:auto;white-space:pre-wrap;}")
     else:
@@ -318,13 +321,14 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
         if any(item.get("opentip") for item in urls):
             parts.append(_opentip_zone_legend())
         show_original = any(item.get("original_url") for item in urls)
+        parts.append("<div class=\"table-wrap\">")
         if show_original:
             parts.append(
-                "<table><tr><th>URL</th><th>Original</th><th>Redirects</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
+                "<table class=\"url-table\"><tr><th>URL</th><th>Original</th><th>Redirects</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
             )
         else:
             parts.append(
-                "<table><tr><th>URL</th><th>Redirects</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
+                "<table class=\"url-table\"><tr><th>URL</th><th>Redirects</th><th>VT</th><th>URLScan</th><th>OpenTIP</th><th>Screenshot</th></tr>"
             )
         for item in urls:
             url_value = str(item.get("url"))
@@ -361,7 +365,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 ]
             )
             parts.append("<tr>" + "".join(row_cells) + "</tr>")
-        parts.append("</table></div>")
+        parts.append("</table></div></div>")
 
     forms = message.get("forms", [])
     if forms:
