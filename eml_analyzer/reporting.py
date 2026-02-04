@@ -33,13 +33,14 @@ def build_html_report(
     parts.append(f"color:{palette['body_fg']};margin:0;padding:24px;")
     parts.append("}")
     parts.append(
-        ".container{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;}"
+        ".container{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:16px;min-width:0;}"
     )
     parts.append(".card{")
     parts.append(f"background:{palette['card_bg']};")
     parts.append(f"border:1px solid {palette['card_border']};")
     parts.append("border-radius:16px;padding:18px;")
     parts.append(f"box-shadow:{palette['card_shadow']};")
+    parts.append("overflow:hidden;")
     parts.append("}")
     parts.append(
         ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}"
@@ -50,7 +51,7 @@ def build_html_report(
     parts.append("h1{margin:0 0 8px 0;font-size:2.1rem;}")
     parts.append("h2{margin:0 0 12px 0;font-size:1.4rem;}")
     parts.append("h3{margin:0 0 8px 0;font-size:1.1rem;}")
-    parts.append("table{width:100%;max-width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;}")
+    parts.append("table{width:100%;max-width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;table-layout:fixed;}")
     parts.append(
         "th,td{border-bottom:1px solid #efe7db;padding:8px 10px;text-align:left;vertical-align:top;font-size:0.95rem;}"
     )
