@@ -140,19 +140,20 @@ def build_html_report(
     parts.append(".cell-value{flex:1;min-width:0;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;word-break:break-word;}")
     parts.append(".cell .copy-btn{margin-left:auto;}")
     parts.append(".url-cell{min-width:260px;}")
-    parts.append(".url-cell .cell-value{display:block;max-width:320px;white-space:nowrap;overflow:auto;}")
     parts.append(".redirect-cell{min-width:220px;}")
     parts.append(".intel-cell{min-width:140px;}")
-    parts.append(".redirect-cell .cell-value,.intel-cell .cell-value{white-space:normal;}")
-    parts.append(".table-wrap{overflow-x:auto;padding-bottom:6px;}")
-    parts.append(".table-wrap::-webkit-scrollbar{height:10px;}")
-    parts.append(".table-wrap::-webkit-scrollbar-track{background:rgba(0,0,0,0.08);border-radius:999px;}")
-    parts.append(".table-wrap::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.28);border-radius:999px;}")
-    parts.append(".table-wrap::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,0.4);}")
+    parts.append(".scroll-cell .cell-value{display:block;max-width:320px;white-space:nowrap;overflow:auto;}")
+    parts.append(".redirect-cell.scroll-cell .cell-value{max-width:260px;}")
+    parts.append(".intel-cell .cell-value{white-space:normal;}")
+    parts.append(".table-wrap{overflow-x:visible;}")
+    parts.append(".scroll-cell .cell-value::-webkit-scrollbar{height:10px;}")
+    parts.append(".scroll-cell .cell-value::-webkit-scrollbar-track{background:rgba(0,0,0,0.06);border-radius:999px;}")
+    parts.append(".scroll-cell .cell-value::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#c6b59a,#e2d1b3);border-radius:999px;box-shadow:inset 0 0 2px rgba(0,0,0,0.25);}")
+    parts.append(".scroll-cell .cell-value::-webkit-scrollbar-thumb:hover{background:linear-gradient(90deg,#b69f7c,#d9c2a1);}")
     if theme == "dark":
-        parts.append(".table-wrap::-webkit-scrollbar-track{background:rgba(230,237,242,0.12);}")
-        parts.append(".table-wrap::-webkit-scrollbar-thumb{background:rgba(230,237,242,0.35);}")
-        parts.append(".table-wrap::-webkit-scrollbar-thumb:hover{background:rgba(230,237,242,0.55);}")
+        parts.append(".scroll-cell .cell-value::-webkit-scrollbar-track{background:rgba(230,237,242,0.12);}")
+        parts.append(".scroll-cell .cell-value::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#6b8fb0,#8fb2cc);}")
+        parts.append(".scroll-cell .cell-value::-webkit-scrollbar-thumb:hover{background:linear-gradient(90deg,#7aa1c2,#a6c6dd);}")
     parts.append(".url-table{table-layout:auto;}")
     if theme == "dark":
         parts.append(".code-block{background:#0f1622;color:#e5eef9;border:1px solid #2f3d52;border-radius:10px;padding:10px;overflow:auto;white-space:pre-wrap;}")
@@ -360,13 +361,13 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
             redirect_html = _format_redirect_chain(item.get("redirect_chain"), defang_urls)
             original_value = _format_rewrite(item, defang_urls)
             row_cells = [
-                f"<td class=\"url-cell\">{_cell_value(html.escape(url_value), url_value)}</td>",
+                f"<td class=\"url-cell scroll-cell\">{_cell_value(html.escape(url_value), url_value)}</td>",
             ]
             if show_original:
                 row_cells.append(
-                    f"<td class=\"url-cell\">{_cell_value(_format_table_value(original_value), original_value)}</td>"
+                    f"<td class=\"url-cell scroll-cell\">{_cell_value(_format_table_value(original_value), original_value)}</td>"
                 )
-            row_cells.append(f"<td class=\"redirect-cell\">{redirect_html}</td>")
+            row_cells.append(f"<td class=\"redirect-cell scroll-cell\">{redirect_html}</td>")
             row_cells.extend(
                 [
                     f"<td class=\"intel-cell\">{_cell_value(_format_table_value(vt_summary), vt_summary)}</td>",
