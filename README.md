@@ -180,6 +180,7 @@ Report defaults:
 - `URL_REDIRECT_ONLY_TRACKED`: Only resolve server redirects for click-tracking URLs
 - `VERBOSE`: Enable verbose debug logging by default (true/false)
 - `DEBUG`: Enable detailed debug logging with tracebacks (true/false)
+- `DEBUG_LOG_FILE`: Write debug logs to a file (path)
 - `TOOLS_AUTO_DOWNLOAD`: Auto-download external tools if missing (true/false)
 - `REPORT_THEME_FILE`: Path to a JSON palette file for HTML reports
 - `IOC_CACHE_DB`: SQLite cache path for IOC de-duplication across runs

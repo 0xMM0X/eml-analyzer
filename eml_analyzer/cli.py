@@ -70,6 +70,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Enable detailed debug logging with tracebacks.",
     )
     parser.add_argument(
+        "--debug-log",
+        help="Write debug logs to the specified file instead of stderr.",
+    )
+    parser.add_argument(
         "--dark",
         action="store_true",
         help="Generate a dark mode HTML report.",
@@ -103,6 +107,11 @@ def main(argv: list[str] | None = None) -> int:
     debug = args.debug or config.debug
     if debug:
         verbose = True
+    debug_log_path = args.debug_log or config.debug_log_file
+    if debug_log_path:
+        from .log_utils import set_log_file
+
+        set_log_file(debug_log_path)
     analyzer = EmlAnalyzer(config, verbose=verbose, debug=debug)
     eml_paths = _collect_eml_paths(
         args.eml,
