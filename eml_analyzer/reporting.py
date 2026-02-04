@@ -40,7 +40,8 @@ def build_html_report(
     parts.append(f"border:1px solid {palette['card_border']};")
     parts.append("border-radius:16px;padding:18px;")
     parts.append(f"box-shadow:{palette['card_shadow']};")
-    parts.append("overflow:hidden;")
+    parts.append("overflow-x:auto;")
+    parts.append("overflow-y:visible;")
     parts.append("}")
     parts.append(
         ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;}"
@@ -51,7 +52,7 @@ def build_html_report(
     parts.append("h1{margin:0 0 8px 0;font-size:2.1rem;}")
     parts.append("h2{margin:0 0 12px 0;font-size:1.4rem;}")
     parts.append("h3{margin:0 0 8px 0;font-size:1.1rem;}")
-    parts.append("table{width:100%;max-width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;table-layout:fixed;}")
+    parts.append("table{width:100%;max-width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;table-layout:auto;}")
     parts.append(
         "th,td{border-bottom:1px solid #efe7db;padding:8px 10px;text-align:left;vertical-align:top;font-size:0.95rem;}"
     )
@@ -147,7 +148,12 @@ def build_html_report(
     parts.append(".scroll-cell .cell-value{display:block;max-width:320px;white-space:nowrap;overflow:auto;}")
     parts.append(".redirect-cell.scroll-cell .cell-value{max-width:260px;}")
     parts.append(".intel-cell .cell-value{white-space:normal;}")
-    parts.append(".table-wrap{overflow-x:visible;}")
+    parts.append(".table-wrap{overflow-x:auto;}")
+    parts.append(".table-wrap{max-width:100%;}")
+    parts.append(".table-wrap::-webkit-scrollbar{height:10px;}")
+    parts.append(".table-wrap::-webkit-scrollbar-track{background:rgba(0,0,0,0.06);border-radius:999px;}")
+    parts.append(".table-wrap::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#c6b59a,#e2d1b3);border-radius:999px;}")
+    parts.append(".table-wrap::-webkit-scrollbar-thumb:hover{background:linear-gradient(90deg,#b69f7c,#d9c2a1);}")
     parts.append(".scroll-cell .cell-value::-webkit-scrollbar{height:10px;}")
     parts.append(".scroll-cell .cell-value::-webkit-scrollbar-track{background:rgba(0,0,0,0.06);border-radius:999px;}")
     parts.append(".scroll-cell .cell-value::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#c6b59a,#e2d1b3);border-radius:999px;box-shadow:inset 0 0 2px rgba(0,0,0,0.25);}")
@@ -384,6 +390,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
     forms = message.get("forms", [])
     if forms:
         parts.append("<div class=\"section\"><h3>Embedded HTML Forms</h3>")
+        parts.append("<div class=\"table-wrap\">")
         parts.append(
             "<table><tr><th>Action</th><th>Method</th><th>Inputs</th><th>Password</th><th>File</th><th>Hidden</th><th>External</th><th>Heuristics</th><th>Details</th></tr>"
         )
@@ -411,7 +418,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 f"<td>{details}</td>"
                 "</tr>"
             )
-        parts.append("</table></div>")
+        parts.append("</table></div></div>")
 
     ips = message.get("ips", [])
     if ips:
@@ -1946,3 +1953,6 @@ def _format_header_check(check: dict[str, Any] | None) -> str:
     reason = check.get("reason")
     return f"unknown ({reason})" if reason else "unknown"
     
+        parts.append(".table-wrap::-webkit-scrollbar-track{background:rgba(230,237,242,0.12);}")
+        parts.append(".table-wrap::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#6b8fb0,#8fb2cc);}")
+        parts.append(".table-wrap::-webkit-scrollbar-thumb:hover{background:linear-gradient(90deg,#7aa1c2,#a6c6dd);}")
