@@ -1952,7 +1952,3 @@ def _format_header_check(check: dict[str, Any] | None) -> str:
         return f"mismatch (ext={guessed}, header={ctype}, magic={header})"
     reason = check.get("reason")
     return f"unknown ({reason})" if reason else "unknown"
-    
-        parts.append(".table-wrap::-webkit-scrollbar-track{background:rgba(230,237,242,0.12);}")
-        parts.append(".table-wrap::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#6b8fb0,#8fb2cc);}")
-        parts.append(".table-wrap::-webkit-scrollbar-thumb:hover{background:linear-gradient(90deg,#7aa1c2,#a6c6dd);}")
