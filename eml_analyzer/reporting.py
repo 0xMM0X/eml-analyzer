@@ -138,6 +138,8 @@ def build_html_report(
     parts.append(".cell{display:flex;align-items:center;gap:8px;}")
     parts.append(".cell-value{flex:1;min-width:0;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;word-break:break-word;}")
     parts.append(".cell .copy-btn{margin-left:auto;}")
+    parts.append(".url-cell{min-width:260px;}")
+    parts.append(".url-cell .cell-value{word-break:break-all;overflow-wrap:anywhere;}")
     if theme == "dark":
         parts.append(".code-block{background:#0f1622;color:#e5eef9;border:1px solid #2f3d52;border-radius:10px;padding:10px;overflow:auto;white-space:pre-wrap;}")
     else:
@@ -343,11 +345,11 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
             redirect_html = _format_redirect_chain(item.get("redirect_chain"), defang_urls)
             original_value = _format_rewrite(item, defang_urls)
             row_cells = [
-                f"<td>{_cell_value(html.escape(url_value), url_value)}</td>",
+                f"<td class=\"url-cell\">{_cell_value(html.escape(url_value), url_value)}</td>",
             ]
             if show_original:
                 row_cells.append(
-                    f"<td>{_cell_value(_format_table_value(original_value), original_value)}</td>"
+                    f"<td class=\"url-cell\">{_cell_value(_format_table_value(original_value), original_value)}</td>"
                 )
             row_cells.append(f"<td>{redirect_html}</td>")
             row_cells.extend(
