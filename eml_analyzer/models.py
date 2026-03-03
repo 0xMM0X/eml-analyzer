@@ -73,6 +73,7 @@ class HeaderAnalysis:
     summary: dict[str, Any] = field(default_factory=dict)
     received_chain: list[str] = field(default_factory=list)
     auth_results: dict[str, str] = field(default_factory=dict)
+    auth_alignment: dict[str, Any] = field(default_factory=dict)
     arc_chain: dict[str, Any] = field(default_factory=dict)
     timing: dict[str, Any] = field(default_factory=dict)
     mta_anomalies: list[str] = field(default_factory=list)

@@ -52,6 +52,10 @@ class AnalyzerConfig:
     score_hybrid_suspicious: int = 2
     score_mx_failed: int = 1
     score_reply_to_mismatch: int = 2
+    score_auth_alignment_fail: int = 2
+    update_check: bool = True
+    update_check_timeout_seconds: int = 2
+    github_repo: str = "0xMM0X/eml-analyzer"
 
     @staticmethod
     def from_env() -> "AnalyzerConfig":
@@ -112,6 +116,15 @@ class AnalyzerConfig:
             score_hybrid_suspicious=_parse_int(os.getenv("SCORE_HYBRID_SUSPICIOUS"), 2),
             score_mx_failed=_parse_int(os.getenv("SCORE_MX_FAILED"), 1),
             score_reply_to_mismatch=_parse_int(os.getenv("SCORE_REPLY_TO_MISMATCH"), 2),
+            score_auth_alignment_fail=_parse_int(
+                os.getenv("SCORE_AUTH_ALIGNMENT_FAIL"), 2
+            ),
+            update_check=os.getenv("UPDATE_CHECK", "true").lower()
+            in {"1", "true", "yes"},
+            update_check_timeout_seconds=_parse_int(
+                os.getenv("UPDATE_CHECK_TIMEOUT_SECONDS"), 2
+            ),
+            github_repo=(os.getenv("GITHUB_REPO") or "0xMM0X/eml-analyzer").strip(),
         )
 
 

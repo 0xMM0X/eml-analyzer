@@ -25,6 +25,7 @@ EML Analyzer is a professional‑grade email triage toolkit for security analyst
 
 **Core Analysis**
 - Header parsing, Received chains, and timing/MTA anomaly detection
+- DKIM/SPF/DMARC deep auth analysis with alignment breakdown per domain
 - URL extraction (text/HTML), click‑tracking expansion, optional server‑side redirects
 - IP extraction from headers and bodies
 - Attachment hashing (MD5/SHA1/SHA256)
@@ -157,6 +158,15 @@ Extract embedded attachments from an existing JSON report:
 python -m eml_analyzer.cli --extract-from-report message-report.json --extract-dir extracted_from_report
 ```
 
+All-in-one analyst case bundle (JSON + HTML + extracted artifacts + run log + ZIP):
+```bash
+python -m eml_analyzer.cli -f message.eml --case-bundle
+```
+Notes:
+- `--case-bundle` packages outputs but does not force enrichments/macros.
+- Add `-e` if you want extracted attachments included.
+- Add `--skip-enrichments` / `--skip-macros` as needed.
+
 ---
 
 ## Configuration
@@ -179,9 +189,13 @@ You can set these in `.env` (see `.env.example`).
 | `REPORT_SCORE_DETAILS` | Include score breakdown | false |
 | `REPORT_DEFANG_URLS` | Defang URLs in HTML | false |
 | `REPORT_THEME_FILE` | JSON palette file |  |
+| `SCORE_AUTH_ALIGNMENT_FAIL` | Points for auth pass but domain misalignment | 2 |
 | `VERBOSE` | Verbose logging | false |
 | `DEBUG` | Detailed debug logging | false |
 | `DEBUG_LOG_FILE` | Write logs to file |  |
+| `UPDATE_CHECK` | Check GitHub for newer commit on startup | true |
+| `UPDATE_CHECK_TIMEOUT_SECONDS` | Update check timeout (seconds) | 2 |
+| `GITHUB_REPO` | GitHub repo used for update checks | `0xMM0X/eml-analyzer` |
 | `URL_SCREENSHOT_ENABLED` | Enable URL screenshots | false |
 | `URL_SCREENSHOT_TIMEOUT_MS` | Screenshot timeout | 20000 |
 | `URL_REDIRECT_RESOLVE` | Resolve server redirects | false |
@@ -236,6 +250,7 @@ The JSON report includes root message analysis, nested EML details, URLs/IPs/att
 
 Signals (capped at 10):
 - Authentication failures (`spf`, `dkim`, `dmarc`): +2 each
+- Authentication alignment failures (pass but not aligned to Header.From domain): +2 each
 - VirusTotal URL: malicious +5, suspicious +3
 - VirusTotal file: malicious +6, suspicious +3
 - Executable attachments: +1

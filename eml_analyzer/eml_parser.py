@@ -294,12 +294,20 @@ class EmlParser:
 
     def _analyze_headers(self, msg: Message) -> HeaderAnalysis:
         received_chain = msg.get_all("Received", [])
-        auth_results = self._parse_auth_results(msg.get_all("Authentication-Results", []))
+        auth_values = msg.get_all("Authentication-Results", [])
+        from_domain = _extract_domain_from_address(msg.get("From"))
+        auth_alignment = self._parse_auth_alignment(auth_values, from_domain)
+        auth_results = self._parse_auth_results(auth_values)
+        summary = auth_alignment.get("summary") or {}
+        for mech in ("spf", "dkim", "dmarc"):
+            result = ((summary.get(mech) or {}).get("result") or "").strip()
+            if result:
+                auth_results[mech] = result
         arc_chain = self._analyze_arc_chain(msg)
         timing, mta_anomalies, mta_anomaly_details = self._analyze_timing(
             received_chain, msg.get("Date")
         )
-        summary = {
+        header_summary = {
             "message_id": msg.get("Message-Id"),
             "in_reply_to": msg.get("In-Reply-To"),
             "references": msg.get("References"),
@@ -308,9 +316,10 @@ class EmlParser:
             "received_count": len(received_chain),
         }
         return HeaderAnalysis(
-            summary=summary,
+            summary=header_summary,
             received_chain=received_chain,
             auth_results=auth_results,
+            auth_alignment=auth_alignment,
             arc_chain=arc_chain,
             timing=timing,
             mta_anomalies=mta_anomalies,
@@ -336,6 +345,73 @@ class EmlParser:
                     key, value = part.split("=", 1)
                     results[key.strip()] = value.strip()
         return results
+
+    @staticmethod
+    def _parse_auth_alignment(values: list[str], from_domain: str) -> dict[str, Any]:
+        entries: list[dict[str, Any]] = []
+        per_domain: dict[str, Any] = {}
+        summary: dict[str, Any] = {}
+        for mech in ("spf", "dkim", "dmarc"):
+            summary[mech] = {"result": "", "domain": "", "aligned": None}
+
+        for idx, item in enumerate(values, start=1):
+            entry: dict[str, Any] = {"index": idx, "raw": item}
+            authserv = item.split(";", 1)[0].strip()
+            if authserv and "=" not in authserv:
+                entry["authserv_id"] = authserv
+
+            has_data = False
+            for mech in ("spf", "dkim", "dmarc"):
+                result = _extract_auth_result(item, mech)
+                if not result:
+                    continue
+                mech_domain = _extract_auth_domain(item, mech)
+                aligned = None
+                if mech_domain and from_domain:
+                    aligned = _domains_aligned(mech_domain, from_domain)
+                entry[mech] = {
+                    "result": result,
+                    "domain": mech_domain,
+                    "aligned": aligned,
+                }
+                has_data = True
+
+                domain_key = mech_domain or from_domain or "unknown"
+                if domain_key not in per_domain:
+                    per_domain[domain_key] = {}
+                if mech not in per_domain[domain_key]:
+                    per_domain[domain_key][mech] = {
+                        "results": {},
+                        "aligned_pass": 0,
+                        "aligned_fail": 0,
+                        "aligned_unknown": 0,
+                    }
+                mech_bucket = per_domain[domain_key][mech]
+                mech_bucket["results"][result] = mech_bucket["results"].get(result, 0) + 1
+                if aligned is True:
+                    mech_bucket["aligned_pass"] += 1
+                elif aligned is False:
+                    mech_bucket["aligned_fail"] += 1
+                else:
+                    mech_bucket["aligned_unknown"] += 1
+
+                old = summary.get(mech) or {}
+                old_result = str(old.get("result") or "").lower()
+                if _auth_rank(result) >= _auth_rank(old_result):
+                    summary[mech] = {
+                        "result": result,
+                        "domain": mech_domain or "",
+                        "aligned": aligned,
+                    }
+            if has_data:
+                entries.append(entry)
+
+        return {
+            "from_domain": from_domain,
+            "entries": entries,
+            "summary": summary,
+            "per_domain": per_domain,
+        }
 
     @staticmethod
     def _split_addresses(values: list[str]) -> list[str]:
@@ -522,6 +598,67 @@ def _normalize_url(value: str) -> str:
     return value.strip().rstrip("/").lower()
 
 
+def _extract_domain_from_address(value: str | None) -> str:
+    if not value:
+        return ""
+    addr = parseaddr(value)[1]
+    if not addr or "@" not in addr:
+        return ""
+    return addr.split("@", 1)[1].strip().lower().rstrip(".")
+
+
+def _extract_auth_result(raw: str, mechanism: str) -> str:
+    match = re.search(rf"\b{re.escape(mechanism)}\s*=\s*([a-zA-Z0-9_-]+)", raw, re.IGNORECASE)
+    if not match:
+        return ""
+    return match.group(1).strip().lower()
+
+
+def _extract_auth_domain(raw: str, mechanism: str) -> str:
+    patterns: list[str]
+    if mechanism == "spf":
+        patterns = [r"\bsmtp\.mailfrom=([^\s;]+)", r"\benvelope-from=([^\s;]+)", r"\bsmtp\.helo=([^\s;]+)"]
+    elif mechanism == "dkim":
+        patterns = [r"\bheader\.d=([^\s;]+)"]
+    elif mechanism == "dmarc":
+        patterns = [r"\bheader\.from=([^\s;]+)"]
+    else:
+        patterns = []
+
+    for pattern in patterns:
+        match = re.search(pattern, raw, re.IGNORECASE)
+        if not match:
+            continue
+        value = match.group(1).strip().strip("<>").strip().rstrip(".").lower()
+        if "@" in value:
+            value = value.split("@", 1)[1]
+        return value
+    return ""
+
+
+def _domains_aligned(candidate: str, from_domain: str) -> bool:
+    candidate = (candidate or "").strip().lower().rstrip(".")
+    from_domain = (from_domain or "").strip().lower().rstrip(".")
+    if not candidate or not from_domain:
+        return False
+    return candidate == from_domain or candidate.endswith(f".{from_domain}")
+
+
+def _auth_rank(result: str) -> int:
+    value = (result or "").strip().lower()
+    if value in {"fail", "softfail", "temperror", "permerror"}:
+        return 4
+    if value in {"neutral"}:
+        return 3
+    if value in {"none"}:
+        return 2
+    if value in {"pass"}:
+        return 1
+    if value:
+        return 1
+    return 0
+
+
 def _detect_password_protection(filename: str | None, payload: bytes) -> dict[str, Any] | None:
     if not payload:
         return None
@@ -706,6 +843,7 @@ def _analysis_to_dict(analysis: MessageAnalysis) -> dict[str, Any]:
             "summary": analysis.headers.summary,
             "received_chain": analysis.headers.received_chain,
             "auth_results": analysis.headers.auth_results,
+            "auth_alignment": analysis.headers.auth_alignment,
             "arc_chain": analysis.headers.arc_chain,
             "timing": analysis.headers.timing,
             "mta_anomalies": analysis.headers.mta_anomalies,

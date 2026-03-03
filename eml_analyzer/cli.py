@@ -5,6 +5,10 @@ import json
 import sys
 import os
 import base64
+import zipfile
+import subprocess
+from pathlib import Path
+import requests
 
 from .analyzer import EmlAnalyzer
 from .config import AnalyzerConfig
@@ -113,6 +117,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip Office macro extraction/analysis.",
     )
+    parser.add_argument(
+        "--case-bundle",
+        nargs="?",
+        const=True,
+        help="All-in-one bundle mode: generate JSON+HTML, extract attachments, write logs, and zip per EML (optional output dir/.zip path).",
+    )
     return parser
 
 
@@ -129,11 +139,14 @@ def main(argv: list[str] | None = None) -> int:
     if debug:
         verbose = True
     debug_log_path = args.debug_log or config.debug_log_file
-    if debug_log_path:
+    if debug_log_path and not args.case_bundle:
         from .log_utils import set_log_file
 
         set_log_file(debug_log_path)
     analyzer = EmlAnalyzer(config, verbose=verbose, debug=debug)
+    update_messages = _check_for_updates(config)
+    for line in update_messages:
+        sys.stderr.write(f"{line}\n")
 
     if args.extract_from_report:
         out_dir = args.extract_dir or os.path.dirname(os.path.abspath(args.extract_from_report)) or "."
@@ -168,9 +181,20 @@ def main(argv: list[str] | None = None) -> int:
             eta = _estimate_eta(start_time, index - 1, total)
             eta_text = f", eta {eta}" if eta else ""
             sys.stderr.write(f"[{index}/{total}] Analyzing {eml_path}{eta_text}\n")
-        extract_dir = None
-        if args.extract_attachments:
-            extract_dir = args.extract_dir or _default_extract_dir(eml_path)
+        case_bundle_info = None
+        if args.case_bundle:
+            case_bundle_info = _prepare_case_bundle(eml_path, args.case_bundle, total)
+            from .log_utils import set_log_file
+
+            set_log_file(case_bundle_info["log_path"])
+            for line in update_messages:
+                _append_case_log(case_bundle_info["log_path"], line)
+            _append_case_log(case_bundle_info["log_path"], f"START analyzing {eml_path}")
+            extract_dir = case_bundle_info["extract_dir"] if args.extract_attachments else None
+        else:
+            extract_dir = None
+            if args.extract_attachments:
+                extract_dir = args.extract_dir or _default_extract_dir(eml_path)
         try:
             report = analyzer.analyze_path(
                 eml_path,
@@ -186,6 +210,10 @@ def main(argv: list[str] | None = None) -> int:
                 traceback.print_exc()
             else:
                 sys.stderr.write(f"Error analyzing {eml_path}: {exc}\n")
+            if case_bundle_info:
+                _append_case_log(case_bundle_info["log_path"], f"ERROR analyzing {eml_path}: {exc}")
+                bundle_path = _finalize_case_bundle(case_bundle_info, eml_path)
+                sys.stderr.write(f"Case bundle created (with errors): {bundle_path}\n")
             continue
         output = analyzer.report_as_dict(report)
         all_reports.append(output)
@@ -194,7 +222,10 @@ def main(argv: list[str] | None = None) -> int:
             output.get("statistics", {}).pop("risk_breakdown", None)
 
         if args.json:
-            json_path = _resolve_output_path(eml_path, args.json, ".json", output_dir)
+            if case_bundle_info:
+                json_path = case_bundle_info["json_path"]
+            else:
+                json_path = _resolve_output_path(eml_path, args.json, ".json", output_dir)
             serialized = json.dumps(output, indent=2)
             with open(json_path, "w", encoding="utf-8") as handle:
                 handle.write(serialized)
@@ -214,11 +245,18 @@ def main(argv: list[str] | None = None) -> int:
                 theme_overrides=theme_overrides,
                 defang_urls=defang_urls,
             )
-            html_path = _resolve_output_path(eml_path, args.html, ".html", output_dir)
+            if case_bundle_info:
+                html_path = case_bundle_info["html_path"]
+            else:
+                html_path = _resolve_output_path(eml_path, args.html, ".html", output_dir)
             with open(html_path, "w", encoding="utf-8") as handle:
                 handle.write(html_report)
+        if case_bundle_info:
+            _append_case_log(case_bundle_info["log_path"], f"DONE analyzing {eml_path}")
+            bundle_path = _finalize_case_bundle(case_bundle_info, eml_path)
+            sys.stderr.write(f"Case bundle created: {bundle_path}\n")
 
-    if output_dir and total > 1:
+    if output_dir and total > 1 and not args.case_bundle:
         correlation = build_correlation(all_reports)
         if args.json:
             corr_path = _resolve_correlation_path(output_dir, ".json")
@@ -339,6 +377,131 @@ def _resolve_correlation_path(output_dir: str, extension: str) -> str:
     import os
 
     return os.path.join(output_dir, f"correlation-report{extension}")
+
+
+def _prepare_case_bundle(eml_path: str, case_bundle_value: object, total: int) -> dict[str, str]:
+    eml_abs = os.path.abspath(eml_path)
+    eml_dir = os.path.dirname(eml_abs) or "."
+    eml_name = os.path.basename(eml_abs)
+    stem, _ = os.path.splitext(eml_name)
+
+    if isinstance(case_bundle_value, str) and case_bundle_value.lower().endswith(".zip") and total == 1:
+        zip_path = os.path.abspath(case_bundle_value)
+        root_dir = os.path.splitext(zip_path)[0]
+    else:
+        base_dir = eml_dir
+        if isinstance(case_bundle_value, str):
+            base_dir = os.path.abspath(case_bundle_value)
+        root_dir = os.path.join(base_dir, f"{stem}-case")
+        zip_path = os.path.join(base_dir, f"{stem}-case.zip")
+
+    artifacts_dir = os.path.join(root_dir, "artifacts")
+    os.makedirs(artifacts_dir, exist_ok=True)
+    return {
+        "root_dir": root_dir,
+        "extract_dir": artifacts_dir,
+        "log_path": os.path.join(root_dir, "run.log"),
+        "json_path": os.path.join(root_dir, f"{stem}-report.json"),
+        "html_path": os.path.join(root_dir, f"{stem}-report.html"),
+        "zip_path": zip_path,
+    }
+
+
+def _finalize_case_bundle(case_bundle_info: dict[str, str], eml_path: str) -> str:
+    root_dir = case_bundle_info["root_dir"]
+    zip_path = case_bundle_info["zip_path"]
+    os.makedirs(os.path.dirname(zip_path) or ".", exist_ok=True)
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for current_root, _, files in os.walk(root_dir):
+            for name in files:
+                full_path = os.path.join(current_root, name)
+                arcname = os.path.relpath(full_path, root_dir)
+                zf.write(full_path, arcname)
+        if os.path.isfile(eml_path):
+            zf.write(eml_path, os.path.join("source", os.path.basename(eml_path)))
+    return zip_path
+
+
+def _append_case_log(path: str, message: str) -> None:
+    from datetime import datetime, timezone
+
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"[{stamp}] {message}\n")
+    except OSError:
+        return
+
+
+def _check_for_updates(config: AnalyzerConfig) -> list[str]:
+    messages: list[str] = []
+    if not config.update_check:
+        messages.append("[update] Check disabled (UPDATE_CHECK=false)")
+        return messages
+    local_sha = _git_output("rev-parse", "HEAD")
+    if not local_sha:
+        messages.append("[update] Skipped: not a git working tree")
+        return messages
+    branch = _git_output("rev-parse", "--abbrev-ref", "HEAD") or "main"
+    repo = (config.github_repo or "").strip()
+    if not repo or "/" not in repo:
+        messages.append("[update] Skipped: invalid GITHUB_REPO value")
+        return messages
+    timeout_seconds = max(1, int(config.update_check_timeout_seconds))
+    messages.append(
+        f"[update] Checking {repo}@{branch} (timeout={timeout_seconds}s)"
+    )
+    url = f"https://api.github.com/repos/{repo}/commits/{branch}"
+    try:
+        response = requests.get(
+            url,
+            timeout=timeout_seconds,
+            headers={"Accept": "application/vnd.github+json"},
+        )
+    except requests.RequestException as exc:
+        messages.append(f"[update] Skipped: network/API error ({exc.__class__.__name__})")
+        return messages
+    if response.status_code >= 400:
+        messages.append(
+            f"[update] Skipped: GitHub API returned {response.status_code} {response.reason}"
+        )
+        return messages
+    try:
+        payload = response.json()
+    except ValueError:
+        messages.append("[update] Skipped: invalid GitHub API response")
+        return messages
+    remote_sha = str(payload.get("sha") or "").strip()
+    if not remote_sha:
+        messages.append("[update] Skipped: remote commit SHA missing")
+        return messages
+    if remote_sha == local_sha:
+        messages.append(f"[update] Up to date ({local_sha[:10]})")
+        return messages
+    short_local = local_sha[:10]
+    short_remote = remote_sha[:10]
+    messages.append(
+        f"[update] Newer upstream commit found for {repo}: local {short_local}, remote {short_remote}"
+    )
+    messages.append(f"[update] Run: git pull origin {branch}")
+    return messages
+
+
+def _git_output(*args: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=str(Path.cwd()),
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if result.returncode != 0:
+        return ""
+    return (result.stdout or "").strip()
 
 
 def _monotonic() -> float:

@@ -283,6 +283,7 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
     headers = message.get("headers", {})
     summary = headers.get("summary", {})
     auth = headers.get("auth_results", {})
+    auth_alignment = headers.get("auth_alignment", {})
     received = headers.get("received_chain", [])
 
     parts.append("<div class=\"section\"><h3>Header Summary</h3>")
@@ -299,6 +300,14 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
     if auth:
         parts.append("<div class=\"section\"><h3>Authentication Results</h3>")
         parts.append(_auth_table(auth))
+        parts.append("</div>")
+    if auth_alignment and (
+        auth_alignment.get("summary")
+        or auth_alignment.get("per_domain")
+        or auth_alignment.get("entries")
+    ):
+        parts.append("<div class=\"section\"><h3>Authentication Alignment</h3>")
+        parts.append(_auth_alignment_table(auth_alignment))
         parts.append("</div>")
 
     mime_tree = message.get("mime_tree")
@@ -774,6 +783,80 @@ def _auth_table(items: dict[str, Any]) -> str:
     return "\n".join(rows)
 
 
+def _auth_alignment_table(alignment: dict[str, Any]) -> str:
+    parts: list[str] = []
+    from_domain = alignment.get("from_domain")
+    if from_domain:
+        parts.append(f"<div class=\"small\">Header.From domain: {html.escape(str(from_domain))}</div>")
+
+    summary = alignment.get("summary") or {}
+    if summary:
+        rows = []
+        rows.append("<table>")
+        rows.append("<tr><th>Check</th><th>Result</th><th>Domain</th><th>Aligned</th></tr>")
+        for mech in ("spf", "dkim", "dmarc"):
+            info = summary.get(mech) or {}
+            result = str(info.get("result") or "")
+            domain = str(info.get("domain") or "")
+            aligned = info.get("aligned")
+            if aligned is True:
+                aligned_text = "yes"
+                aligned_status = "pass"
+            elif aligned is False:
+                aligned_text = "no"
+                aligned_status = "fail"
+            else:
+                aligned_text = "n/a"
+                aligned_status = ""
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(mech)}</td>"
+                f"<td class=\"{_status_class(result)}\">{html.escape(result or 'n/a')}</td>"
+                f"<td>{html.escape(domain or 'n/a')}</td>"
+                f"<td class=\"{_status_class(aligned_status)}\">{html.escape(aligned_text)}</td>"
+                "</tr>"
+            )
+        rows.append("</table>")
+        parts.append("<h4>Summary</h4>")
+        parts.append("\n".join(rows))
+
+    per_domain = alignment.get("per_domain") or {}
+    if per_domain:
+        rows = []
+        rows.append("<table>")
+        rows.append("<tr><th>Domain</th><th>Mechanism</th><th>Results</th><th>Alignment</th></tr>")
+        for domain in sorted(per_domain.keys()):
+            mech_data = per_domain.get(domain) or {}
+            domain_rows = []
+            for mech in ("spf", "dkim", "dmarc"):
+                data = mech_data.get(mech)
+                if not data:
+                    continue
+                results = data.get("results") or {}
+                result_text = ", ".join(f"{k}={v}" for k, v in sorted(results.items())) or "n/a"
+                align_text = (
+                    f"pass={data.get('aligned_pass', 0)}, "
+                    f"fail={data.get('aligned_fail', 0)}, "
+                    f"unknown={data.get('aligned_unknown', 0)}"
+                )
+                domain_rows.append(
+                    "<tr>"
+                    f"<td>{html.escape(mech)}</td>"
+                    f"<td>{html.escape(result_text)}</td>"
+                    f"<td>{html.escape(align_text)}</td>"
+                    "</tr>"
+                )
+            if not domain_rows:
+                domain_rows.append("<tr><td>n/a</td><td>n/a</td><td>n/a</td></tr>")
+            first_row = domain_rows[0].replace("<tr>", f"<tr><td rowspan=\"{len(domain_rows)}\">{html.escape(str(domain))}</td>", 1)
+            rows.append(first_row)
+            rows.extend(domain_rows[1:])
+        rows.append("</table>")
+        parts.append("<h4>Per-Domain Breakdown</h4>")
+        parts.append("\n".join(rows))
+    return "\n".join(parts)
+
+
 def _status_class(value: str) -> str:
     lowered = value.lower()
     if "pass" in lowered:
@@ -1148,6 +1231,10 @@ def _score_breakdown_table(breakdown: dict[str, Any]) -> str:
     auth = breakdown.get("auth_failures") or []
     rows.append(
         f"<tr><td>Auth failures</td><td>{html.escape(', '.join(auth) or 'none')}</td><td>{breakdown.get('auth_points', 0)}</td></tr>"
+    )
+    auth_align = breakdown.get("auth_alignment_failures") or []
+    rows.append(
+        f"<tr><td>Auth alignment failures</td><td>{html.escape(', '.join(auth_align) or 'none')}</td><td>{breakdown.get('auth_alignment_points', 0)}</td></tr>"
     )
     reply_to_mismatch = breakdown.get("reply_to_mismatch", 0)
     rows.append(

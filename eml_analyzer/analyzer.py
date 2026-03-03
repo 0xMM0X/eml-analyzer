@@ -467,6 +467,9 @@ def _calculate_risk_score(
     breakdown: dict[str, Any] = {
         "auth_failures": [],
         "auth_points": 0,
+        "auth_alignment_failures": [],
+        "auth_alignment_points": 0,
+        "auth_alignment": {},
         "reply_to_mismatch": 0,
         "reply_to_points": 0,
         "vt_url": {"malicious": 0, "suspicious": 0},
@@ -502,6 +505,21 @@ def _calculate_risk_score(
             score += config.score_auth_fail
             breakdown["auth_failures"].append(key)
             breakdown["auth_points"] += config.score_auth_fail
+    alignment = analysis.headers.auth_alignment or {}
+    alignment_summary = alignment.get("summary") or {}
+    breakdown["auth_alignment"] = {
+        "from_domain": alignment.get("from_domain"),
+        "summary": alignment_summary,
+        "per_domain": alignment.get("per_domain") or {},
+    }
+    for key in ("spf", "dkim", "dmarc"):
+        info = alignment_summary.get(key) or {}
+        result = str(info.get("result") or "").lower()
+        aligned = info.get("aligned")
+        if result == "pass" and aligned is False:
+            score += config.score_auth_alignment_fail
+            breakdown["auth_alignment_failures"].append(key)
+            breakdown["auth_alignment_points"] += config.score_auth_alignment_fail
 
     if _reply_to_from_mismatch(analysis):
         breakdown["reply_to_mismatch"] = 1
