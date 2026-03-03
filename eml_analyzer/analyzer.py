@@ -80,47 +80,52 @@ class EmlAnalyzer:
         self,
         path: str,
         extract_dir: str | None = None,
+        enable_enrichments: bool = True,
+        enable_macro_analysis: bool = True,
+        embed_attachments: bool = False,
     ) -> AnalysisReport:
         log(self._verbose, f"Reading EML from {path}")
         with open(path, "rb") as handle:
             data = handle.read()
         parser = EmlParser(
-            vt_client=self._vt_client,
+            vt_client=self._vt_client if enable_enrichments else None,
             max_bytes_for_hash=self._config.max_bytes_for_hash,
             extract_dir=extract_dir,
             verbose=self._verbose,
             debug=self._debug,
+            enable_macro_analysis=enable_macro_analysis,
+            embed_attachments=embed_attachments,
         )
         root = parser.parse_bytes(data)
         log_debug(
             self._debug,
             f"Parsed counts: urls={len(root.urls)}, ips={len(root.ips)}, attachments={len(root.attachments)}",
         )
-        if self._vt_client:
+        if enable_enrichments and self._vt_client:
             log(self._verbose, "Enriching URLs via VirusTotal")
             self._enrich_urls_recursive(root)
-        if self._abuse_client:
+        if enable_enrichments and self._abuse_client:
             log(self._verbose, "Enriching IPs via AbuseIPDB")
             self._enrich_ips_recursive(root)
-        if self._ipinfo_client:
+        if enable_enrichments and self._ipinfo_client:
             log(self._verbose, "Enriching IPs via GeoIP/ASN")
             self._enrich_geoip_recursive(root)
-        if self._urlscan_client:
+        if enable_enrichments and self._urlscan_client:
             log(self._verbose, "Submitting URLs to urlscan.io")
             self._enrich_urlscan_recursive(root)
-        if self._config.url_redirect_resolve:
+        if enable_enrichments and self._config.url_redirect_resolve:
             log(self._verbose, "Resolving server-side URL redirects")
             self._resolve_redirects_recursive(root)
-        if self._hybrid_client:
+        if enable_enrichments and self._hybrid_client:
             log(self._verbose, "Enriching attachments via Hybrid Analysis")
             self._enrich_hybrid_recursive(root)
-        if self._mxtoolbox_client:
+        if enable_enrichments and self._mxtoolbox_client:
             log(self._verbose, "Enriching sender domains via MxToolbox")
             self._enrich_domains_recursive(root)
-        if self._opentip_client:
+        if enable_enrichments and self._opentip_client:
             log(self._verbose, "Enriching items via Kaspersky OpenTIP")
             self._enrich_opentip_recursive(root)
-        if self._screenshotter:
+        if enable_enrichments and self._screenshotter:
             log(self._verbose, "Capturing URL screenshots")
             self._capture_url_screenshots_recursive(root)
         self._normalize_iocs_recursive(root)

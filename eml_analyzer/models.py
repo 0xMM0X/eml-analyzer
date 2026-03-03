@@ -26,12 +26,14 @@ class AttachmentInfo:
     consensus: dict[str, Any] | None = None
     password_protected: dict[str, Any] | None = None
     entropy: dict[str, Any] | None = None
+    embedded_payload_b64: str | None = None
 
 
 @dataclass
 class UrlInfo:
     url: str
     source: str
+    count: int = 1
     vt: dict[str, Any] | None = None
     urlscan: dict[str, Any] | None = None
     opentip: dict[str, Any] | None = None

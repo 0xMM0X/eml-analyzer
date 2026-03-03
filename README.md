@@ -89,6 +89,8 @@ curl -L https://raw.githubusercontent.com/DidierStevens/DidierStevensSuite/maste
 
 ## Quick Start
 ```bash
+git clone https://github.com/0xMM0X/eml-analyzer/
+cd eml-analyzer
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
@@ -129,11 +131,31 @@ Verbose + debug:
 python -m eml_analyzer.cli -f message.eml --json --html -v --debug
 ```
 
+Skip all enrichments (VT/urlscan/OpenTIP/AbuseIPDB/Hybrid/MX/GeoIP/screenshots/redirect resolution):
+```bash
+python -m eml_analyzer.cli -f message.eml --json --html --skip-enrichments
+```
+
+Skip Office macro extraction:
+```bash
+python -m eml_analyzer.cli -f message.eml --json --html --skip-macros
+```
+
 Extract attachments:
 ```bash
 python -m eml_analyzer.cli -f message.eml -e --extract-dir extracted_files
 ```
 If `--extract-dir` is omitted, attachments are saved next to the input EML.
+
+Embed attachment bytes inside report JSON/HTML:
+```bash
+python -m eml_analyzer.cli -f message.eml --json --html --embed-attachments
+```
+
+Extract embedded attachments from an existing JSON report:
+```bash
+python -m eml_analyzer.cli --extract-from-report message-report.json --extract-dir extracted_from_report
+```
 
 ---
 

@@ -354,6 +354,9 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
             )
         for item in urls:
             url_value = str(item.get("url"))
+            count_value = item.get("count", 1)
+            if isinstance(count_value, int) and count_value > 1:
+                url_value = f"{url_value} ({count_value})"
             if defang_urls:
                 url_value = _defang(url_value)
             mismatch_flag = item.get("mismatch")
@@ -493,6 +496,8 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 attachment_rows["Saved Path"] = saved_path
             if item.get("is_eml") is True:
                 attachment_rows["Is EML"] = True
+            if item.get("embedded_payload_b64"):
+                attachment_rows["Extract From Report"] = _format_embedded_attachment_link(item)
             if item.get("vt") is not None:
                 attachment_rows["VT"] = _with_icon_link(
                     _format_vt_summary(item.get("vt")),
@@ -544,9 +549,24 @@ def _render_message(message: dict[str, Any], depth: int, defang_urls: bool) -> s
                 status = html.escape(str(pdf_info.get("status") or "unknown"))
                 parts.append("<details>")
                 parts.append(f"<summary>{tool_name} ({status})</summary>")
+                parse_warning = pdf_info.get("parse_warning")
+                if parse_warning:
+                    parts.append(f"<div class=\"note\">{html.escape(str(parse_warning))}</div>")
                 error = pdf_info.get("error")
                 if error:
                     parts.append(f"<div class=\"note\">{html.escape(str(error))}</div>")
+                parse_errors = pdf_info.get("parse_errors") or []
+                if parse_errors:
+                    parts.append("<div class=\"section\"><h4>Parse Errors</h4>")
+                    for item in parse_errors[:50]:
+                        obj_id = item.get("id")
+                        err = item.get("error")
+                        parts.append(
+                            f"<div class=\"small\">object {html.escape(str(obj_id))}: {html.escape(str(err))}</div>"
+                        )
+                    if len(parse_errors) > 50:
+                        parts.append("<div class=\"small\">... more parse errors omitted ...</div>")
+                    parts.append("</div>")
                 objects_detail = pdf_info.get("objects_detail") or []
                 if objects_detail:
                     parts.append("<div class=\"section\"><h4>Objects (decoded)</h4>")
@@ -1495,6 +1515,24 @@ def _format_qr_summary(qr_info: dict[str, Any] | None) -> str:
     if status and status != "ok":
         return str(status)
     return ""
+
+
+def _format_embedded_attachment_link(item: dict[str, Any]) -> str:
+    payload_b64 = item.get("embedded_payload_b64")
+    if not isinstance(payload_b64, str) or not payload_b64:
+        return "none"
+    filename = item.get("filename") or "attachment.bin"
+    if not isinstance(filename, str):
+        filename = "attachment.bin"
+    mime = item.get("content_type") or "application/octet-stream"
+    if not isinstance(mime, str) or not mime:
+        mime = "application/octet-stream"
+    href = f"data:{mime};base64,{payload_b64}"
+    return (
+        f"<a href=\"{html.escape(href)}\" download=\"{html.escape(filename)}\" class=\"icon-link\">"
+        "Download"
+        "</a>"
+    )
 
 
 def _format_form_inputs_summary(form: dict[str, Any]) -> str:

@@ -6,6 +6,7 @@ import email
 import os
 import re
 import mimetypes
+import base64
 from email import policy
 from email.message import Message
 from email.utils import getaddresses, parseaddr, parsedate_to_datetime
@@ -39,6 +40,8 @@ class EmlParser:
         extract_dir: str | None = None,
         verbose: bool = False,
         debug: bool = False,
+        enable_macro_analysis: bool = True,
+        embed_attachments: bool = False,
     ) -> None:
         self._vt_client = vt_client
         self._max_bytes_for_hash = max_bytes_for_hash
@@ -47,6 +50,8 @@ class EmlParser:
         self._attachment_index = 0
         self._verbose = verbose
         self._debug = debug
+        self._enable_macro_analysis = enable_macro_analysis
+        self._embed_attachments = embed_attachments
 
     def parse_bytes(self, data: bytes, depth: int = 0) -> MessageAnalysis:
         log(self._verbose, f"Parsing EML bytes (depth={depth}, size={len(data)})")
@@ -116,11 +121,20 @@ class EmlParser:
             is_eml=self._is_eml_attachment(part, filename),
         )
 
-        attachment.office_info = analyze_office_attachment(filename, payload)
-        if attachment.office_info:
-            log(self._verbose, f"Office analysis: {attachment.office_info}")
+        if self._enable_macro_analysis:
+            attachment.office_info = analyze_office_attachment(filename, payload)
+            if attachment.office_info:
+                log(self._verbose, f"Office analysis: {attachment.office_info}")
         attachment.header_check = _check_attachment_header(filename, content_type, payload)
-        attachment.pdf_info = analyze_pdf_attachment(filename, payload)
+        try:
+            attachment.pdf_info = analyze_pdf_attachment(filename, payload)
+        except BaseException as exc:
+            attachment.pdf_info = {
+                "status": "error",
+                "tool": "peepdf",
+                "error": f"pdf analysis failed safely: {exc}",
+            }
+            log_debug(self._debug, f"PDF analysis exception handled: {exc}")
         if attachment.pdf_info:
             log(self._verbose, f"PDF analysis: {attachment.pdf_info}")
         attachment.qr_info = extract_qr_codes(filename, content_type, payload)
@@ -128,6 +142,8 @@ class EmlParser:
             log(self._verbose, f"QR analysis: {attachment.qr_info}")
         attachment.password_protected = _detect_password_protection(filename, payload)
         attachment.entropy = _compute_entropy(payload)
+        if self._embed_attachments and payload:
+            attachment.embedded_payload_b64 = base64.b64encode(payload).decode("ascii")
 
         if self._extract_dir and payload:
             saved_path = self._write_attachment(payload, filename, content_type, depth)
@@ -169,7 +185,8 @@ class EmlParser:
                 mismatch = _normalize_url(visible) != _normalize_url(href)
                 rewrite = detect_rewritten_url(href)
                 if rewrite:
-                    analysis.urls.append(
+                    self._add_or_merge_url(
+                        analysis,
                         UrlInfo(
                             url=href,
                             source=source,
@@ -179,10 +196,11 @@ class EmlParser:
                             original_url=rewrite.get("original"),
                             rewrite_provider=rewrite.get("provider"),
                             redirect_chain={"click": expand_click_tracking(href)},
-                        )
+                        ),
                     )
                 else:
-                    analysis.urls.append(
+                    self._add_or_merge_url(
+                        analysis,
                         UrlInfo(
                             url=href,
                             source=source,
@@ -190,7 +208,7 @@ class EmlParser:
                             href_url=href,
                             mismatch=mismatch,
                             redirect_chain={"click": expand_click_tracking(href)},
-                        )
+                        ),
                     )
         else:
             urls = extract_urls_from_text(text)
@@ -199,25 +217,46 @@ class EmlParser:
         for url in urls:
             rewrite = detect_rewritten_url(url)
             if rewrite:
-                analysis.urls.append(
+                self._add_or_merge_url(
+                    analysis,
                     UrlInfo(
                         url=url,
                         source=source,
                         original_url=rewrite.get("original"),
                         rewrite_provider=rewrite.get("provider"),
                         redirect_chain={"click": expand_click_tracking(url)},
-                    )
+                    ),
                 )
             else:
-                analysis.urls.append(
+                self._add_or_merge_url(
+                    analysis,
                     UrlInfo(
                         url=url,
                         source=source,
                         redirect_chain={"click": expand_click_tracking(url)},
-                    )
+                    ),
                 )
         if urls:
             log_debug(self._debug, f"URLs extracted from {source}: {len(urls)}")
+
+    def _add_or_merge_url(self, analysis: MessageAnalysis, incoming: UrlInfo) -> None:
+        for existing in analysis.urls:
+            if existing.url != incoming.url:
+                continue
+            existing.count += 1
+            existing.mismatch = bool(existing.mismatch or incoming.mismatch)
+            if not existing.visible_url and incoming.visible_url:
+                existing.visible_url = incoming.visible_url
+            if not existing.href_url and incoming.href_url:
+                existing.href_url = incoming.href_url
+            if not existing.original_url and incoming.original_url:
+                existing.original_url = incoming.original_url
+            if not existing.rewrite_provider and incoming.rewrite_provider:
+                existing.rewrite_provider = incoming.rewrite_provider
+            if existing.redirect_chain is None and incoming.redirect_chain is not None:
+                existing.redirect_chain = incoming.redirect_chain
+            return
+        analysis.urls.append(incoming)
 
     def _extract_ips_from_part(self, part: Message, analysis: MessageAnalysis) -> None:
         try:

@@ -3,6 +3,8 @@
 import argparse
 import json
 import sys
+import os
+import base64
 
 from .analyzer import EmlAnalyzer
 from .config import AnalyzerConfig
@@ -92,6 +94,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--extract-dir",
         help="Directory to write extracted attachments (default: same directory as input).",
     )
+    parser.add_argument(
+        "--embed-attachments",
+        action="store_true",
+        help="Embed attachment bytes (base64) into JSON/HTML report for later extraction.",
+    )
+    parser.add_argument(
+        "--extract-from-report",
+        help="Extract embedded attachments from an existing JSON report file.",
+    )
+    parser.add_argument(
+        "--skip-enrichments",
+        action="store_true",
+        help="Skip all external enrichment lookups/APIs.",
+    )
+    parser.add_argument(
+        "--skip-macros",
+        action="store_true",
+        help="Skip Office macro extraction/analysis.",
+    )
     return parser
 
 
@@ -99,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(argv)
 
-    if not args.eml and not args.dir:
+    if not args.extract_from_report and not args.eml and not args.dir:
         parser.error("Either -f/--file or -d/--dir is required.")
 
     config = AnalyzerConfig.from_env()
@@ -113,6 +134,12 @@ def main(argv: list[str] | None = None) -> int:
 
         set_log_file(debug_log_path)
     analyzer = EmlAnalyzer(config, verbose=verbose, debug=debug)
+
+    if args.extract_from_report:
+        out_dir = args.extract_dir or os.path.dirname(os.path.abspath(args.extract_from_report)) or "."
+        extracted = _extract_from_report_file(args.extract_from_report, out_dir)
+        sys.stderr.write(f"Extracted {extracted} attachment(s) to {out_dir}\n")
+        return 0
     eml_paths = _collect_eml_paths(
         args.eml,
         args.dir,
@@ -148,6 +175,9 @@ def main(argv: list[str] | None = None) -> int:
             report = analyzer.analyze_path(
                 eml_path,
                 extract_dir=extract_dir,
+                enable_enrichments=not args.skip_enrichments,
+                enable_macro_analysis=not args.skip_macros,
+                embed_attachments=args.embed_attachments,
             )
         except Exception as exc:
             if debug:
@@ -327,6 +357,67 @@ def _estimate_eta(start: float, completed: int, total: int) -> str:
     if minutes:
         return f"{minutes}m {seconds}s"
     return f"{seconds}s"
+
+
+def _extract_from_report_file(report_path: str, out_dir: str) -> int:
+    with open(report_path, "r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    root = data.get("root") if isinstance(data, dict) else None
+    if not isinstance(root, dict):
+        return 0
+    os.makedirs(out_dir, exist_ok=True)
+    return _extract_from_message_dict(root, out_dir, prefix="root")
+
+
+def _extract_from_message_dict(message: dict[str, object], out_dir: str, prefix: str) -> int:
+    count = 0
+    attachments = message.get("attachments")
+    if isinstance(attachments, list):
+        for index, item in enumerate(attachments, start=1):
+            if not isinstance(item, dict):
+                continue
+            payload_b64 = item.get("embedded_payload_b64")
+            if isinstance(payload_b64, str) and payload_b64:
+                try:
+                    payload = base64.b64decode(payload_b64)
+                except Exception:
+                    payload = b""
+                if payload:
+                    name = item.get("filename")
+                    if not isinstance(name, str) or not name.strip():
+                        name = f"{prefix}-attachment-{index}.bin"
+                    safe_name = _safe_filename(name)
+                    final_path = _dedupe_path(os.path.join(out_dir, safe_name))
+                    with open(final_path, "wb") as handle:
+                        handle.write(payload)
+                    count += 1
+            nested = item.get("nested_eml")
+            if isinstance(nested, dict):
+                count += _extract_from_message_dict(nested, out_dir, prefix=f"{prefix}-a{index}")
+    return count
+
+
+def _safe_filename(name: str) -> str:
+    cleaned = []
+    for ch in name:
+        if ch.isalnum() or ch in {".", "_", "-"}:
+            cleaned.append(ch)
+        else:
+            cleaned.append("_")
+    safe = "".join(cleaned).strip("._")
+    return safe[:180] if safe else "attachment.bin"
+
+
+def _dedupe_path(path: str) -> str:
+    base, ext = os.path.splitext(path)
+    if not os.path.exists(path):
+        return path
+    idx = 1
+    while True:
+        candidate = f"{base}_{idx}{ext}"
+        if not os.path.exists(candidate):
+            return candidate
+        idx += 1
 
 
 if __name__ == "__main__":

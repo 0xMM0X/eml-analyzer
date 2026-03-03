@@ -9,6 +9,8 @@ import tempfile
 import shutil
 import subprocess
 import zlib
+import io
+import contextlib
 from pathlib import Path
 from urllib.request import urlretrieve
 from typing import Any
@@ -46,9 +48,48 @@ def analyze_pdf_attachment(filename: str | None, payload: bytes) -> dict[str, An
                 "pdf_parser": pdf_parser,
             }
 
-        parser = PDFParser()
-        doc = _parse_with_peepdf(parser, tmp_path)
-    except Exception as exc:  # pragma: no cover
+        # Suppress noisy peepdf parser output for malformed objects.
+        sink_out = io.StringIO()
+        sink_err = io.StringIO()
+        with contextlib.redirect_stdout(sink_out), contextlib.redirect_stderr(sink_err):
+            parser = PDFParser()
+            doc = _parse_with_peepdf(parser, tmp_path)
+            if doc is None:
+                return {
+                    "status": "partial",
+                    "tool": "peepdf",
+                    "heuristics": heuristics,
+                    "objects": 0,
+                    "streams": 0,
+                    "objects_detail": [],
+                    "streams_detail": [],
+                    "objects_truncated": False,
+                    "streams_truncated": False,
+                    "parse_warning": "peepdf could not build document model (malformed PDF object stream)",
+                    "parse_errors": [],
+                    "pdfid": pdfid,
+                    "pdf_parser": pdf_parser,
+                }
+
+            objects_detail, streams_detail, obj_trunc, stream_trunc, parse_errors = _collect_pdf_details(doc)
+            stats = {
+                "status": "ok",
+                "tool": "peepdf",
+                "version": _get_pdf_version(doc),
+                "objects": _get_pdf_objects(doc),
+                "streams": _get_pdf_streams(doc),
+                "heuristics": heuristics,
+                "objects_detail": objects_detail,
+                "streams_detail": streams_detail,
+                "objects_truncated": obj_trunc,
+                "streams_truncated": stream_trunc,
+                "parse_warning": getattr(doc, "_parse_warning", None),
+                "parse_errors": parse_errors,
+                "pdfid": pdfid,
+                "pdf_parser": pdf_parser,
+            }
+            return stats
+    except BaseException as exc:  # pragma: no cover
         return {
             "status": "error",
             "tool": "peepdf",
@@ -63,23 +104,7 @@ def analyze_pdf_attachment(filename: str | None, payload: bytes) -> dict[str, An
                 os.unlink(tmp_path)
             except OSError:
                 pass
-
-    objects_detail, streams_detail, obj_trunc, stream_trunc = _collect_pdf_details(doc)
-    stats = {
-        "status": "ok",
-        "tool": "peepdf",
-        "version": _get_pdf_version(doc),
-        "objects": _get_pdf_objects(doc),
-        "streams": _get_pdf_streams(doc),
-        "heuristics": heuristics,
-        "objects_detail": objects_detail,
-        "streams_detail": streams_detail,
-        "objects_truncated": obj_trunc,
-        "streams_truncated": stream_trunc,
-        "pdfid": pdfid,
-        "pdf_parser": pdf_parser,
-    }
-    return stats
+    return None
 
 
 def _is_pdf(filename: str | None, payload: bytes) -> bool:
@@ -126,11 +151,22 @@ def _scan_pdf_tokens(payload: bytes) -> dict[str, Any]:
 
 def _parse_with_peepdf(parser: Any, path: str) -> Any:
     if hasattr(parser, "parse"):
-        result = parser.parse(path)
+        # peepdf may print parser errors directly to stdout/stderr for malformed PDFs.
+        # Suppress noisy output and return partial data when possible.
+        sink_out = io.StringIO()
+        sink_err = io.StringIO()
+        with contextlib.redirect_stdout(sink_out), contextlib.redirect_stderr(sink_err):
+            try:
+                result = parser.parse(path)
+            except BaseException:
+                return None
         if isinstance(result, tuple) and len(result) == 2:
             status, doc = result
             if status not in (0, 1):
-                raise RuntimeError(f"peepdf parse error: {status}")
+                if doc is None:
+                    return None
+                # Keep partial document so malformed objects don't block analysis.
+                setattr(doc, "_parse_warning", f"peepdf parse warning (status={status})")
             return doc
         return result
     raise RuntimeError("Unsupported peepdf parser API")
@@ -175,16 +211,21 @@ def _get_pdf_streams(doc: Any) -> Any:
 
 def _collect_pdf_details(
     doc: Any, limit: int = 200, stream_preview_limit: int = 4000
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool, bool]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], bool, bool, list[dict[str, Any]]]:
     if doc is None or not hasattr(doc, "getObject") or not hasattr(doc, "maxObjectId"):
-        return [], [], False, False
+        return [], [], False, False, []
     objects_detail: list[dict[str, Any]] = []
     streams_detail: list[dict[str, Any]] = []
+    parse_errors: list[dict[str, Any]] = []
     objects_truncated = False
     streams_truncated = False
     max_id = getattr(doc, "maxObjectId", 0) or 0
     for obj_id in range(1, max_id + 1):
-        obj = doc.getObject(obj_id)
+        try:
+            obj = doc.getObject(obj_id)
+        except Exception as exc:
+            parse_errors.append({"id": obj_id, "error": str(exc)})
+            continue
         if obj is None:
             continue
         obj_type = obj.__class__.__name__
@@ -200,7 +241,11 @@ def _collect_pdf_details(
                     raw_value = None
             if raw_value is None and hasattr(obj, "rawValue"):
                 raw_value = getattr(obj, "rawValue", None)
-            obj_preview, obj_trunc = _preview_stream(raw_value, stream_preview_limit)
+            try:
+                obj_preview, obj_trunc = _preview_stream(raw_value, stream_preview_limit)
+            except Exception as exc:
+                parse_errors.append({"id": obj_id, "error": f"object preview error: {exc}"})
+                obj_preview, obj_trunc = "", False
             objects_detail.append(
                 {
                     "id": obj_id,
@@ -217,9 +262,13 @@ def _collect_pdf_details(
                 raw_stream = getattr(obj, "rawStream", None)
                 decoded_stream = getattr(obj, "decodedStream", None)
                 encoded_stream = getattr(obj, "encodedStream", None)
-                decoded_preview, decoded_truncated = _preview_stream(
-                    decoded_stream, stream_preview_limit
-                )
+                try:
+                    decoded_preview, decoded_truncated = _preview_stream(
+                        decoded_stream, stream_preview_limit
+                    )
+                except Exception as exc:
+                    parse_errors.append({"id": obj_id, "error": f"stream preview error: {exc}"})
+                    decoded_preview, decoded_truncated = "", False
                 streams_detail.append(
                     {
                         "id": obj_id,
@@ -233,7 +282,7 @@ def _collect_pdf_details(
                 )
         if objects_truncated and streams_truncated:
             break
-    return objects_detail, streams_detail, objects_truncated, streams_truncated
+    return objects_detail, streams_detail, objects_truncated, streams_truncated, parse_errors
 
 
 def _safe_len(value: Any) -> int | None:
