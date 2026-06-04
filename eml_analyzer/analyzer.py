@@ -84,9 +84,14 @@ class EmlAnalyzer:
         enable_macro_analysis: bool = True,
         embed_attachments: bool = False,
     ) -> AnalysisReport:
-        log(self._verbose, f"Reading EML from {path}")
-        with open(path, "rb") as handle:
-            data = handle.read()
+        log(self._verbose, f"Reading {'MSG' if path.lower().endswith('.msg') else 'EML'} from {path}")
+        if path.lower().endswith(".msg"):
+            from .msg_parser import msg_to_eml_bytes
+
+            data = msg_to_eml_bytes(path)
+        else:
+            with open(path, "rb") as handle:
+                data = handle.read()
         parser = EmlParser(
             vt_client=self._vt_client if enable_enrichments else None,
             max_bytes_for_hash=self._config.max_bytes_for_hash,

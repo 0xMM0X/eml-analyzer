@@ -27,7 +27,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-d",
         "--dir",
-        help="Analyze all .eml files in a directory.",
+        help="Analyze all .eml and .msg files in a directory.",
     )
     parser.add_argument(
         "--recursive",
@@ -316,7 +316,7 @@ def _collect_eml_paths(
     include_patterns = includes or []
     exclude_patterns = excludes or []
     if not include_patterns:
-        include_patterns = ["*.eml"]
+        include_patterns = ["*.eml", "*.msg"]
 
     entries: list[str] = []
     if recursive:

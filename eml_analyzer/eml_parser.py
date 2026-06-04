@@ -158,6 +158,10 @@ class EmlParser:
             log(self._verbose, f"Parsing nested EML (depth={depth + 1})")
             nested = self._parse_nested_eml(part, payload, depth)
             attachment.nested_eml = nested
+        elif self._is_msg_attachment(filename) and depth < self._max_depth:
+            log(self._verbose, f"Parsing nested MSG (depth={depth + 1})")
+            attachment.is_eml = True
+            attachment.nested_eml = self._parse_nested_msg(payload, depth)
 
         return attachment
 
@@ -430,6 +434,23 @@ class EmlParser:
         if filename and filename.lower().endswith(".eml"):
             return True
         return False
+
+    @staticmethod
+    def _is_msg_attachment(filename: str | None) -> bool:
+        return bool(filename and filename.lower().endswith(".msg"))
+
+    def _parse_nested_msg(self, payload: bytes, depth: int) -> Any:
+        if not payload:
+            return {"status": "empty"}
+        try:
+            from .msg_parser import msg_bytes_to_eml_bytes
+
+            eml_bytes = msg_bytes_to_eml_bytes(payload)
+            return self.parse_bytes(eml_bytes, depth + 1)
+        except ImportError:
+            return {"status": "skipped", "reason": "extract-msg not installed"}
+        except Exception as exc:
+            return {"status": "error", "reason": str(exc)}
 
     def _write_attachment(
         self, payload: bytes, filename: str | None, content_type: str, depth: int
