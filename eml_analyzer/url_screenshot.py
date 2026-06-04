@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Any
 import base64
 
 from .log_utils import log_debug
-
-try:
-    from playwright.sync_api import sync_playwright  # type: ignore
-except Exception:  # pragma: no cover
-    sync_playwright = None
 
 
 @dataclass
@@ -20,7 +16,20 @@ class UrlScreenshotter:
     debug: bool = False
 
     def capture(self, url: str) -> dict[str, Any]:
-        if sync_playwright is None:
+        # Import lazily so the playwright driver is never started at module
+        # load time (which causes a spurious "run playwright install" banner).
+        try:
+            from playwright.sync_api import sync_playwright  # type: ignore
+        except Exception:
+            if getattr(sys, "frozen", False):
+                return {
+                    "status": "missing",
+                    "error": (
+                        "Screenshots require Playwright. "
+                        "Install it on this machine: "
+                        "pip install playwright && playwright install chromium"
+                    ),
+                }
             return {"status": "missing", "error": "playwright not installed"}
         try:
             log_debug(self.debug, f"screenshot start url={url}")
