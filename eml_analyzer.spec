@@ -61,8 +61,11 @@ _pdf_parser_src = _os.path.join("eml_analyzer", "tools", "pdf-parser.py")
 if _os.path.exists(_pdf_parser_src):
     datas.append((_pdf_parser_src, "tools"))
 
-# Collect optional packages — silently skip any that are not installed
-for _pkg in ("oletools", "olefile", "peepdf", "pdfid", "PIL", "pyzbar", "fitz", "playwright"):
+# Collect optional packages — silently skip any that are not installed.
+# Playwright is intentionally excluded: its browser binaries (~200 MB) cannot
+# be self-contained inside the exe. Users who need URL screenshots must install
+# playwright separately on the host: pip install playwright && playwright install chromium
+for _pkg in ("oletools", "olefile", "peepdf", "pdfid", "PIL", "pyzbar", "fitz"):
     try:
         _d, _b, _h = collect_all(_pkg)
         datas += _d
@@ -94,6 +97,12 @@ a = Analysis(
         "wx",
         "test",
         "unittest",
+        # Playwright excluded: browser binaries can't be bundled in a single exe.
+        # The feature degrades gracefully with a clear install message.
+        "playwright",
+        "playwright.sync_api",
+        "playwright.async_api",
+        "playwright._impl",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
